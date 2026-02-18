@@ -1,6 +1,15 @@
 export type MemberTier = 'Silver' | 'Gold' | 'Platinum';
 export type HistoryEventType = 'earn' | 'redeem';
 
+// --- NEW STAFF PROFILE ---
+export interface StaffProfile {
+  id: string; // ID unik staff (biasanya dari UID Firebase Auth)
+  name: string;
+  email: string;
+  role: 'cashier' | 'store_manager';
+  storeLocation: string;
+}
+
 export interface XpRecord {
   id: string;
   date: string;
@@ -17,7 +26,7 @@ export interface UserProfile {
   phoneNumber: string;
   
   // --- UPDATED FIELDS ---
-  email?: string; // Menambahkan email (Optional)
+  email?: string; 
   photoURL?: string; 
   
   currentPoints: number;
@@ -29,7 +38,6 @@ export interface UserProfile {
   vouchers: UserVoucher[];
   
   // --- UPDATED ROLE ---
-  // Menambahkan 'admin' dan 'member' agar logika "God Mode" jalan
   role?: 'master' | 'trial' | 'admin' | 'member'; 
 }
 

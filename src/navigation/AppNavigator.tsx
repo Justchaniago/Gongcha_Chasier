@@ -1,30 +1,30 @@
 import React from 'react';
+import { View, ActivityIndicator } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useStaffAuth } from '../context/StaffAuthContext';
+import { COLORS } from '../theme/colorTokens'; // ✅ Import Colors Statis
+
+// Components
 import CustomTabBar from '../components/CustomTabBar';
 
-import WelcomeScreen from '../screens/WelcomeScreen';
+// Screens
 import LoginScreen from '../screens/LoginScreen';
-import HomeScreen from '../screens/HomeScreen';
-import MenuScreen from '../screens/MenuScreen';
-import QrPlaceholderScreen from '../screens/QrPlaceholderScreen';
-import RewardsScreen from '../screens/RewardsScreen';
-import ProfileScreen from '../screens/ProfileScreen';
-import EditProfileScreen from '../screens/EditProfileScreen';
-import StoreLocatorScreen from '../screens/StoreLocatorScreen';
+import HomeScreen from '../screens/HomeScreen';         
+import HistoryScreen from '../screens/HistoryScreen';     
+import ScannerScreen from '../screens/ScannerScreen';     
+import RewardsScreen from '../screens/RewardsScreen';     
+import ProfileScreen from '../screens/ProfileScreen';     
 
 export type RootStackParamList = {
-  Welcome: undefined;
   Login: undefined;
   MainApp: undefined;
-  StoreLocator: undefined;
-  EditProfile: undefined;
 };
 
 export type RootTabParamList = {
   Home: undefined;
-  Menu: undefined;
-  QR: undefined;
+  History: undefined;
+  Scan: undefined;
   Rewards: undefined;
   Profile: undefined;
 };
@@ -36,13 +36,11 @@ function MainTabNavigator() {
   return (
     <Tab.Navigator
       tabBar={(props) => <CustomTabBar {...props} />}
-      screenOptions={{
-        headerShown: false,
-      }}
+      screenOptions={{ headerShown: false }}
     >
-      <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Menu" component={MenuScreen} />
-      <Tab.Screen name="QR" component={QrPlaceholderScreen} />
+      <Tab.Screen name="Home" component={HomeScreen} /> 
+      <Tab.Screen name="History" component={HistoryScreen} />
+      <Tab.Screen name="Scan" component={ScannerScreen} /> 
       <Tab.Screen name="Rewards" component={RewardsScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
@@ -50,26 +48,23 @@ function MainTabNavigator() {
 }
 
 export default function AppNavigator() {
+  const { staff, loading } = useStaffAuth();
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background.primary }}>
+        <ActivityIndicator size="large" color={COLORS.brand.primary} />
+      </View>
+    );
+  }
+
   return (
-    <Stack.Navigator
-      initialRouteName="Welcome"
-      screenOptions={{
-        headerShown: false,
-      }}
-    >
-      <Stack.Screen name="Welcome" component={WelcomeScreen} />
-      <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="MainApp" component={MainTabNavigator} />
-      <Stack.Screen
-        name="StoreLocator"
-        component={StoreLocatorScreen}
-        options={{ animation: 'slide_from_right' }}
-      />
-      <Stack.Screen
-        name="EditProfile"
-        component={EditProfileScreen}
-        options={{ animation: 'slide_from_right' }}
-      />
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      {staff ? (
+        <Stack.Screen name="MainApp" component={MainTabNavigator} />
+      ) : (
+        <Stack.Screen name="Login" component={LoginScreen} />
+      )}
     </Stack.Navigator>
   );
 }
