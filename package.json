@@ -1,5 +1,5 @@
 {
-  "name": "gongcha_member_app",
+  "name": "gongcha-cashier",
   "version": "1.0.0",
   "main": "index.ts",
   "scripts": {

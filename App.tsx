@@ -8,7 +8,8 @@ import * as Device from 'expo-device';
 import AppNavigator from './src/navigation/AppNavigator';
 import MemberCardModal from './src/components/MemberCardModal';
 import { MemberProvider } from './src/context/MemberContext';
-import { ThemeProvider } from './src/context/ThemeContext'; // <--- IMPORT BARU
+import { ThemeProvider } from './src/context/ThemeContext';
+import { StaffAuthProvider } from './src/context/StaffAuthContext'; // Import baru
 import { preloadAppAssets } from './src/utils/preloadAppAssets';
 
 const MIN_SPLASH_MS = 500;
@@ -115,17 +116,18 @@ export default function App() {
   }
 
   return (
-    <SafeAreaProvider>
-      {/* WRAP APLIKASI DENGAN THEME PROVIDER DI SINI */}
-      <ThemeProvider>
-        <MemberProvider>
-          <NavigationContainer>
-            <AppNavigator />
-          </NavigationContainer>
-          <MemberCardModal />
-        </MemberProvider>
-      </ThemeProvider>
-    </SafeAreaProvider>
+    <StaffAuthProvider>
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <MemberProvider>
+            <NavigationContainer>
+              <AppNavigator />
+            </NavigationContainer>
+            <MemberCardModal />
+          </MemberProvider>
+        </ThemeProvider>
+      </SafeAreaProvider>
+    </StaffAuthProvider>
   );
 }
 

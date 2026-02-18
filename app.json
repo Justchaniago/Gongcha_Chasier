@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Gong Cha ID",
-    "slug": "gongcha-id-pilot",
+    "name": "Gongcha Cashier",
+    "slug": "gongcha-cashier",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -14,7 +14,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.gongcha.id.pilot",
+      "bundleIdentifier": "com.gongcha.cashier",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "We use your location to show the nearest Gong Cha stores.",
         "LSApplicationQueriesSchemes": [
@@ -35,7 +35,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FFF8F0"
       },
-      "package": "com.gongcha.id.pilot",
+      "package": "com.gongcha.cashier",
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",

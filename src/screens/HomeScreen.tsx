@@ -23,12 +23,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import DecorativeBackground from '../components/DecorativeBackground';
 import ScreenFadeTransition from '../components/ScreenFadeTransition';
-import UserAvatar from '../components/UserAvatar';
 import MockBackend from '../services/MockBackend';
 import type { RootTabParamList } from '../navigation/AppNavigator';
 import { MemberTier, UserProfile } from '../types/types';
 import { getGreeting } from '../utils/greetingHelper';
 import { useTheme } from '../context/ThemeContext';
+import { useStaffAuth } from '../context/StaffAuthContext';
 
 const NOTIFICATIONS = [
   { id: '1', title: 'Selamat Ulang Tahun!', body: 'Voucher Birthday diskon 10% sudah aktif. Traktir dirimu sekarang!', time: 'Baru saja', read: false, type: 'gift' },
@@ -61,7 +61,8 @@ const TIER_THEME: Record<MemberTier, any> = {
   },
 };
 
-export default function HomeScreen() {
+export default function DashboardScreen() {
+  const { staff } = useStaffAuth();
   const { colors, activeMode } = useTheme();
   const isDark = activeMode === 'dark';
   
@@ -86,14 +87,11 @@ export default function HomeScreen() {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const isCompact = width < 360;
-  const horizontalPadding = isCompact ? 16 : 20;
-  const avatarSize = isCompact ? 46 : 52;
+  const horizontalPadding = isCompact ? 16 : 24; // Padding sedikit diperlebar agar lega
   const headerIconSize = isCompact ? 44 : 48;
 
   // --- ANIMASI NOTIFIKASI ---
   const openNotifications = () => {
-    // Karena header sekarang fixed, posisi Y lonceng relatif stabil
-    // Tapi kita tetap pakai measure untuk akurasi pixel perfect di berbagai device
     bellRef.current?.measure((x, y, width, height, pageX, pageY) => {
       setBellLayout({ x, y, width, height, pageY });
       setShowNotifications(true);
@@ -213,7 +211,6 @@ export default function HomeScreen() {
   }, [promoCardWidth, promos.length]);
 
   // Modal Transform Logic
-  // Menggunakan posisi Y dari measure (bellLayout.pageY) yang sekarang stabil karena header fixed
   const bellCenterX = (width - horizontalPadding - 42 - 10 - (headerIconSize / 2)); 
   
   const modalTransform = [
@@ -246,37 +243,36 @@ export default function HomeScreen() {
 
         <View style={styles.mainLayout}>
           {/* ============================================================ */}
-          {/* KONTAINER 1: FIXED HEADER (Tidak ikut scroll) */}
+          {/* KONTAINER 1: FIXED HEADER */}
           {/* ============================================================ */}
           <View style={[
             styles.fixedHeaderContainer, 
             { 
-              paddingTop: insets.top + 6,
+              paddingTop: insets.top + 10, // Tambah sedikit padding atas
               paddingHorizontal: horizontalPadding,
-              backgroundColor: colors.background.primary, // Agar konten scroll tidak terlihat di belakang header
+              backgroundColor: colors.background.primary, 
               borderBottomColor: isDark ? colors.border.light : 'transparent',
-              borderBottomWidth: isDark ? 1 : 0, // Garis tipis halus di dark mode
+              borderBottomWidth: isDark ? 1 : 0,
               zIndex: 20
             }
           ]}>
             <View style={styles.headerContent}> 
               <View style={styles.headerLeft}>
-                <View style={styles.avatarWrap}>
-                  <UserAvatar
-                    name={userData?.name ?? 'Member'}
-                    photoURL={userData?.photoURL}
-                    size={avatarSize}
-                  />
-                  <View style={styles.avatarStatusDot} />
-                </View>
+                {/* TEXT CONTAINER TANPA AVATAR */}
                 <View style={styles.headerTextContainer}>
                   <Text style={[styles.greeting, { color: colors.text.secondary }]}>{getGreeting()},</Text>
-                  <Text style={[styles.name, { color: colors.text.primary }]}>{userData?.name ?? 'Member'}</Text>
+                  <Text 
+                    style={[styles.name, { color: colors.text.primary }]}
+                    numberOfLines={1} 
+                    ellipsizeMode="tail"
+                  >
+                    {staff?.name ?? 'Staff'}
+                  </Text>
                 </View>
               </View>
+              
               <View style={styles.headerRight}>
-                
-                {/* TOMBOL LONCENG (Sekarang Fixed) */}
+                {/* TOMBOL LONCENG */}
                 <View ref={bellRef} style={{ opacity: showNotifications ? 0 : 1 }}>
                   <TouchableOpacity
                     style={[
@@ -299,13 +295,14 @@ export default function HomeScreen() {
                   </TouchableOpacity>
                 </View>
 
+                {/* LOGO GONG CHA */}
                 <Image source={require('../../assets/images/logo1.webp')} style={styles.logoTopRight} resizeMode="contain" />
               </View>
             </View>
           </View>
 
           {/* ============================================================ */}
-          {/* KONTAINER 2: SCROLLABLE CONTENT (Sisa layar) */}
+          {/* KONTAINER 2: SCROLLABLE CONTENT */}
           {/* ============================================================ */}
           <ScrollView 
             showsVerticalScrollIndicator={false} 
@@ -315,7 +312,7 @@ export default function HomeScreen() {
               { 
                 paddingHorizontal: horizontalPadding, 
                 paddingBottom: 120 + insets.bottom,
-                paddingTop: 10 // Jarak sedikit dari header
+                paddingTop: 12 
               }
             ]}
           >
@@ -422,7 +419,7 @@ export default function HomeScreen() {
           </ScrollView>
         </View>
 
-        {/* --- MODAL (OVERLAY) --- */}
+        {/* --- MODAL NOTIFIKASI (TETAP SAMA) --- */}
         <Modal
           visible={showNotifications}
           transparent
@@ -444,7 +441,7 @@ export default function HomeScreen() {
               styles.modalContainer,
               {
                 backgroundColor: colors.surface.card,
-                top: insets.top + 6 + headerIconSize + 20, 
+                top: insets.top + 10 + headerIconSize + 20, // Adjusted top offset
                 opacity: opacityAnim,
                 transform: modalTransform
               }
@@ -497,14 +494,13 @@ export default function HomeScreen() {
              </TouchableOpacity>
           </Animated.View>
 
-          {/* DUPLICATE FLOATING BELL (Fixed Position sesuai Header) */}
+          {/* DUPLICATE FLOATING BELL */}
           <Animated.View
             style={[
               styles.notificationBtn,
               { 
                 position: 'absolute',
-                // Gunakan koordinat hasil measure, atau fallback ke posisi estimasi header
-                top: bellLayout.pageY > 0 ? bellLayout.pageY : (insets.top + 6 + 10), 
+                top: bellLayout.pageY > 0 ? bellLayout.pageY : (insets.top + 10 + 10), 
                 right: 20 + 42 + 10,
                 width: headerIconSize, 
                 height: headerIconSize,
@@ -530,13 +526,10 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, position: 'relative' },
-  // Flex container untuk membagi layar jadi 2: Header (fixed) dan Scroll (fluid)
   mainLayout: { flex: 1 }, 
   
-  // FIXED HEADER STYLES
   fixedHeaderContainer: {
-    paddingBottom: 20, // Spacing bawah header
-    // Shadow halus agar header terlihat "mengambang" di atas konten
+    paddingBottom: 20, 
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -547,28 +540,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row', 
     justifyContent: 'space-between', 
     alignItems: 'center',
-    marginTop: 10, // Margin internal
+    marginTop: 10, 
   },
   
-  // SCROLL CONTENT
   scrollView: { flex: 1 },
-  scrollContent: { paddingHorizontal: 20, paddingBottom: 120 },
+  scrollContent: { paddingHorizontal: 24, paddingBottom: 120 },
 
   // HEADER ELEMENTS
-  headerLeft: { flexDirection: 'row', alignItems: 'center' },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, paddingRight: 10 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  avatarWrap: { position: 'relative', marginRight: 12 },
-  avatarStatusDot: { position: 'absolute', bottom: 0, right: 0, width: 14, height: 14, backgroundColor: '#4CAF50', borderRadius: 7, borderWidth: 2, borderColor: '#FFF' },
-  greeting: { fontSize: 13, fontWeight: '500' },
+  
   headerTextContainer: { justifyContent: 'center' },
-  name: { fontSize: 19, fontWeight: 'bold' },
+  
+  // UKURAN FONT DIPERBESAR DI SINI
+  greeting: { fontSize: 15, fontWeight: '600', marginBottom: 2 }, // Sapaan lebih jelas
+  name: { fontSize: 24, fontWeight: '800', letterSpacing: -0.5 }, // Nama besar dan tebal (Ideal)
   
   notificationBtn: { borderRadius: 16, justifyContent: 'center', alignItems: 'center', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10, elevation: 4 },
   notificationBadge: { position: 'absolute', top: 12, right: 14, width: 8, height: 8, borderRadius: 4, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
   notificationBadgeText: { fontSize: 8, color: '#FFF', fontWeight: 'bold', display: 'none' },
-  logoTopRight: { width: 48, height: 48 },
+  logoTopRight: { width: 50, height: 50 }, // Logo sedikit diperbesar agar seimbang
 
-  // MODAL STYLES (Sama seperti sebelumnya)
+  // ... (Sisa styles lainnya tetap sama)
   modalContainer: {
     position: 'absolute', left: 10, right: 10, bottom: 20,
     borderRadius: 32, overflow: 'hidden',
@@ -591,7 +584,6 @@ const styles = StyleSheet.create({
   markReadBtn: { padding: 16, alignItems: 'center', borderTopWidth: 1 },
   markReadText: { fontWeight: 'bold', fontSize: 14 },
 
-  // CARD STYLES
   rewardsCard: { borderRadius: 22, padding: 12, marginBottom: 12, borderWidth: 1, elevation: 3 },
   rewardsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 7 },
   rewardsLabel: { fontSize: 10, fontWeight: 'bold', letterSpacing: 0.8, marginBottom: 2 },
