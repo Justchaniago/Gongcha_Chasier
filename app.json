@@ -1,0 +1,60 @@
+{
+  "expo": {
+    "name": "Gong Cha ID",
+    "slug": "gongcha-id-pilot",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFF8F0"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.gongcha.id.pilot",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "We use your location to show the nearest Gong Cha stores.",
+        "LSApplicationQueriesSchemes": [
+          "comgooglemaps",
+          "comgooglemaps-x-callback",
+          "waze",
+          "google.navigation",
+          "comgooglemaps",
+          "comgooglemaps-x-callback",
+          "waze",
+          "google.navigation"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFF8F0"
+      },
+      "package": "com.gongcha.id.pilot",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-font",
+      "expo-asset",
+      "expo-location"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "515f67da-7d2b-4687-a289-f41af5c21909"
+      }
+    }
+  }
+}
