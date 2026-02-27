@@ -7,7 +7,7 @@ export interface StaffProfile {
   name: string;
   email: string;
   role: 'cashier' | 'store_manager';
-  storeLocation: string;
+  storeLocations: string[];
 }
 
 export interface XpRecord {

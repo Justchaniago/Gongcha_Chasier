@@ -26,7 +26,7 @@ export const TransactionService = {
     memberId: string,
     memberName: string,
     staffId: string,
-    storeLocation: string
+    storeLocations: string[]
   }) {
     try {
       const now = new Date();
@@ -34,7 +34,7 @@ export const TransactionService = {
       const smartId = `${datePart}-${data.transactionId}`;
 
       // 1. Path Sub-koleksi Store
-      const trxDocRef = doc(firestoreDb, "stores", data.storeLocation, "transactions", smartId);
+      const trxDocRef = doc(firestoreDb, "stores", data.storeLocations[0], "transactions", smartId);
 
       const trxPayload: TransactionRecord = {
         transactionId: data.transactionId,
@@ -43,7 +43,7 @@ export const TransactionService = {
         memberId: data.memberId,
         memberName: data.memberName,
         staffId: data.staffId,
-        storeLocation: data.storeLocation,
+        storeLocations: data.storeLocations,
         status: 'pending',
         createdAt: serverTimestamp(),
       };
@@ -55,8 +55,8 @@ export const TransactionService = {
         amount: trxPayload.potentialPoints,
         type: 'earn',
         status: 'pending',
-        context: `Purchase at ${data.storeLocation}`,
-        location: data.storeLocation,
+        context: `Purchase at ${data.storeLocations[0]}`,
+        location: data.storeLocations[0],
         transactionId: data.transactionId
       };
 

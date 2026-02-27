@@ -43,7 +43,7 @@ export const StaffAuthProvider = ({ children }: { children: React.ReactNode }) =
               name: data.name,
               email: data.email,
               role: data.role,
-              storeLocation: data.storeLocation
+              storeLocations: Array.isArray(data.storeLocations) ? data.storeLocations : [data.storeLocations || 'Unknown Location']
             });
           } else {
             // Fallback jika login berhasil tapi data staff tidak ada di DB
@@ -52,7 +52,7 @@ export const StaffAuthProvider = ({ children }: { children: React.ReactNode }) =
               name: currentUser.email?.split('@')[0] || 'Staff',
               email: currentUser.email || '',
               role: 'cashier',
-              storeLocation: 'Unknown Location'
+              storeLocations: ['Unknown Location']
             });
           }
         } catch (e) {

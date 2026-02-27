@@ -48,7 +48,7 @@ export default function ProfileScreen() {
 
          <View style={styles.infoRow}>
             <Text style={styles.label}>Lokasi Toko</Text>
-            <Text style={styles.value}>{renderValue(staff?.storeLocation)}</Text>
+            <Text style={styles.value}>{renderValue(staff?.storeLocations?.[0])}</Text>
          </View>
 
          <View style={styles.divider} />

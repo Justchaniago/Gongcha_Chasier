@@ -1,3 +1,4 @@
+// src/screens/LoginScreen.tsx
 import React, { useState } from 'react';
 import {
   View,
@@ -20,8 +21,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Eye, EyeOff } from 'lucide-react-native'; 
 
-// Import Auth Context Saja (Theme Context Dibuang)
-import { useStaffAuth } from '../context/StaffAuthContext';
+// 🔥 GANTI: Import Auth Zustand
+import { useCashierStore } from '../store/useCashierStore';
 
 // 🎨 Definisi Warna Statis (Light Mode Only)
 const COLORS = {
@@ -37,7 +38,8 @@ const COLORS = {
 };
 
 export default function LoginScreen() {
-  const { login, loading: authLoading } = useStaffAuth();
+  // 🔥 GANTI: Ambil fungsi login dari Zustand
+  const login = useCashierStore((state) => state.login);
   
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -193,14 +195,14 @@ export default function LoginScreen() {
                   styles.primaryButton, 
                   { 
                     backgroundColor: COLORS.primary,
-                    opacity: (localLoading || authLoading) ? 0.7 : 1,
+                    opacity: localLoading ? 0.7 : 1,
                     marginTop: 10
                   }
                 ]}
                 onPress={handleLogin}
-                disabled={localLoading || authLoading}
+                disabled={localLoading}
               >
-                {localLoading || authLoading ? (
+                {localLoading ? (
                   <ActivityIndicator color="#FFF" />
                 ) : (
                   <Text style={[styles.primaryButtonText, { color: COLORS.white }]}>MASUK</Text>

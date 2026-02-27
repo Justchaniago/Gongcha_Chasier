@@ -293,51 +293,12 @@ export default function CashierDashboard() {
   const [isMemberPageVisible, setIsMemberPageVisible] = useState(false);
 
   // --- ZUSTAND STORE INTEGRATION ---
-  const { totalRevenue, memberVisits, storeName, setActiveMember, syncData, setCashierProfile } = useCashierStore();
+  const { totalRevenue, memberVisits, staff, setActiveMember, syncData } = useCashierStore();
+  // Ekstrak nama toko dari data Firebase aslimu!
+  // Ambil outlet pertama dari array storeLocations
+  const storeName = staff?.storeLocations?.[0] || 'Loading Store...';
 
-  // --- FIREBASE INITIALIZATION LOGIC ---
-  useEffect(() => {
-    const initializeCashierData = async () => {
-      try {
-        // NANTI KETIKA FIREBASE SUDAH DI-SETUP, GANTI DENGAN KODE INI:
-        /*
-        import { doc, getDoc } from 'firebase/firestore';
-        import { auth, db } from '../lib/firebase'; // Sesuaikan path
 
-        const currentUser = auth.currentUser;
-        if (!currentUser) return;
-
-        // 1. Ambil data User Kasir untuk tau dia di-assign ke store mana
-        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-        if (userDoc.exists()) {
-           const userData = userDoc.data();
-           const assignedStoreId = userData.storeId;
-
-           // 2. Ambil detail Nama Toko dari koleksi 'stores'
-           const storeDoc = await getDoc(doc(db, 'stores', assignedStoreId));
-           if (storeDoc.exists()) {
-              const storeData = storeDoc.data();
-              
-              // 3. Masukkan ke Otak Zustand
-              setCashierProfile(userData.name, assignedStoreId, storeData.name);
-           }
-        }
-        */
-
-        // --- SIMULASI SEMENTARA SEBELUM AUTH JALAN ---
-        // Kita simulasikan efek fetching 1 detik, lalu update header
-        setTimeout(() => {
-          // Misalnya kasir ini di-assign ke Pakuwon Mall di Firebase
-          setCashierProfile('Ferry Rusly', 'STR-002', 'Pakuwon Mall');
-        }, 1000);
-
-      } catch (error) {
-        console.error("Error fetching store data:", error);
-      }
-    };
-
-    initializeCashierData();
-  }, []);
   
   const SHEET_HIDDEN = height; 
   const SHEET_HALF = height * 0.4; 
