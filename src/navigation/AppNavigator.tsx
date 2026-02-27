@@ -7,6 +7,7 @@ import { COLORS } from '../theme/colorTokens'; // ✅ Import Colors Statis
 
 // Components
 import CustomTabBar from '../components/CustomTabBar';
+import CashierDashboard from '../screens/CashierDashboard';
 
 // Screens
 import LoginScreen from '../screens/LoginScreen';
@@ -33,18 +34,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<RootTabParamList>();
 
 function MainTabNavigator() {
-  return (
-    <Tab.Navigator
-      tabBar={(props) => <CustomTabBar {...props} />}
-      screenOptions={{ headerShown: false }}
-    >
-      <Tab.Screen name="Home" component={HomeScreen} /> 
-      <Tab.Screen name="History" component={HistoryScreen} />
-      <Tab.Screen name="Scan" component={ScannerScreen} /> 
-      <Tab.Screen name="Rewards" component={RewardsScreen} />
-      <Tab.Screen name="Profile" component={ProfileScreen} />
-    </Tab.Navigator>
-  );
+  return <CashierDashboard />;
 }
 
 export default function AppNavigator() {

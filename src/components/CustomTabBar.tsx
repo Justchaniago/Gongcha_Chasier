@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row', 
     backgroundColor: COLORS.bottomNav.background, 
     marginHorizontal: 20, 
-    marginBottom: 20, 
+    marginBottom: -5, 
     borderRadius: 25,
     height: 70, 
     shadowColor: COLORS.bottomNav.shadow, 

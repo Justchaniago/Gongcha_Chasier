@@ -12,6 +12,7 @@ import {
   Platform,
   FlatList,
   Modal,
+  Pressable,
 } from 'react-native';
 import { Bell, X } from 'lucide-react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -19,209 +20,528 @@ import { BlurView } from 'expo-blur';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import DecorativeBackground from '../components/DecorativeBackground';
 import ScreenFadeTransition from '../components/ScreenFadeTransition';
 import { getGreeting } from '../utils/greetingHelper';
 import { useTheme } from '../context/ThemeContext';
 import { useStaffAuth } from '../context/StaffAuthContext';
 
-const NOTIFICATIONS = [
-  { id: '1', title: 'Update Stok', body: 'Stok Brown Sugar hampir habis di gudang.', time: 'Baru saja', read: false, type: 'system' },
-  { id: '2', title: 'Shift Selesai', body: 'Laporan shift pagi telah berhasil disinkronisasi.', time: '2 jam lalu', read: false, type: 'system' },
+// ─── Types ────────────────────────────────────────────────────
+
+type TrxStatus = 'pending' | 'released' | 'void';
+
+interface TrxItem {
+  id: string;
+  memberName: string;
+  memberTier: 'Silver' | 'Gold' | 'Platinum';
+  nominal: number;
+  status: TrxStatus;
+  createdAt: string;
+}
+
+// ─── Dummy data (replace with Firestore) ──────────────────────
+
+const TODAY = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+
+const DATA = {
+  totalAmount: 4_875_000,
+  totalTrx: 47,
+  voucherRedeemed: 9,
+  pendingVouchers: 2,
+};
+
+const TRX: TrxItem[] = [
+  { id: 't1', memberName: 'Rina Kartika',    memberTier: 'Gold',     nominal: 85_000,  status: 'released', createdAt: new Date(Date.now() - 1000*60*12).toISOString() },
+  { id: 't2', memberName: 'Budi Santoso',    memberTier: 'Silver',   nominal: 52_000,  status: 'pending',  createdAt: new Date(Date.now() - 1000*60*34).toISOString() },
+  { id: 't3', memberName: 'Sari Dewi',       memberTier: 'Platinum', nominal: 120_000, status: 'pending',  createdAt: new Date(Date.now() - 1000*60*58).toISOString() },
+  { id: 't4', memberName: 'Andi Wijaya',     memberTier: 'Silver',   nominal: 38_000,  status: 'void',     createdAt: new Date(Date.now() - 1000*60*80).toISOString() },
+  { id: 't5', memberName: 'Dewi Lestari',    memberTier: 'Gold',     nominal: 96_000,  status: 'released', createdAt: new Date(Date.now() - 1000*60*110).toISOString() },
 ];
+
+const TOP_VOUCHERS = [
+  { id: 'v1', title: 'Free Brown Sugar Milk Tea', count: 5 },
+  { id: 'v2', title: 'Buy 1 Get 1 Taro',          count: 3 },
+  { id: 'v3', title: 'Diskon 20% All Size',        count: 1 },
+];
+
+const TIERS = [
+  { tier: 'Platinum', count: 3,  color: '#7C3AED', pct: 12 },
+  { tier: 'Gold',     count: 8,  color: '#C9933A', pct: 33 },
+  { tier: 'Silver',   count: 13, color: '#9CA3AF', pct: 55 },
+];
+
+const NOTIFS = [
+  { id: '1', title: 'Trx POS-0221-009 Void',  body: 'Transaksi Budi divoid oleh admin — nominal tidak sesuai.', time: '1 jam lalu', read: false },
+  { id: '2', title: 'Settlement Selesai',      body: '47 trx berhasil di-match. 2 masuk dispute.',               time: '3 jam lalu', read: false },
+  { id: '3', title: 'Poin Released',           body: 'Batch settlement 22 Feb diproses. Poin aktif ke member.',  time: 'Kemarin',    read: true  },
+];
+
+// ─── Helpers ──────────────────────────────────────────────────
+
+const rp = (n: number) =>
+  n >= 1_000_000
+    ? `Rp ${(n / 1_000_000).toFixed(1)}jt`
+    : `Rp ${n.toLocaleString('id-ID')}`;
+
+const timeAgo = (iso: string) => {
+  const s = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (s < 60) return 'baru saja';
+  if (s < 3600) return `${Math.floor(s / 60)}m lalu`;
+  if (s < 86400) return `${Math.floor(s / 3600)}j lalu`;
+  return `${Math.floor(s / 86400)}h lalu`;
+};
+
+const TIER_COLOR: Record<string, string> = {
+  Silver: '#9CA3AF', Gold: '#C9933A', Platinum: '#7C3AED',
+};
+
+const STATUS_COLOR: Record<TrxStatus, string> = {
+  pending: '#CA8A04', released: '#16A34A', void: '#DC2626',
+};
+
+// ─── Bento Cell wrapper ────────────────────────────────────────
+
+function Cell({
+  onPress, style, children,
+}: { onPress: () => void; style?: any; children: React.ReactNode }) {
+  const sc = useRef(new Animated.Value(1)).current;
+  return (
+    <Pressable
+      onPress={onPress}
+      onPressIn={() => Animated.spring(sc, { toValue: 0.965, useNativeDriver: true, friction: 8, tension: 120 }).start()}
+      onPressOut={() => Animated.spring(sc, { toValue: 1, useNativeDriver: true, friction: 8, tension: 120 }).start()}
+    >
+      <Animated.View style={[{ transform: [{ scale: sc }] }, style]} />
+    </Pressable>
+  );
+}
+
+// ─── Main ──────────────────────────────────────────────────────
 
 export default function DashboardScreen() {
   const { staff } = useStaffAuth();
   const { colors, activeMode } = useTheme();
   const isDark = activeMode === 'dark';
-  
-  // Notification State
-  const [showNotifications, setShowNotifications] = useState(false);
-  const bellRef = useRef<View>(null);
-  const [bellLayout, setBellLayout] = useState({ x: 0, y: 0, width: 0, height: 0, pageY: 0 });
-  
-  // Animation Values
-  const scaleAnim = useRef(new Animated.Value(0)).current;
-  const opacityAnim = useRef(new Animated.Value(0)).current;
-  const backdropAnim = useRef(new Animated.Value(0)).current;
-  const iconRotate = useRef(new Animated.Value(0)).current;
-  const buttonBg = useRef(new Animated.Value(0)).current;
-  
-  const { width, height } = useWindowDimensions();
+  const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
-  const isCompact = width < 360;
-  const horizontalPadding = isCompact ? 16 : 24;
-  const headerIconSize = isCompact ? 44 : 48;
+  const { width, height } = useWindowDimensions();
 
-  const openNotifications = () => {
-    bellRef.current?.measure((x, y, width, height, pageX, pageY) => {
-      setBellLayout({ x, y, width, height, pageY });
-      setShowNotifications(true);
-      
+  const GAP   = 10;
+  const H_PAD = 16;
+  const ICON  = 46;
+  const HALF  = (width - H_PAD * 2 - GAP) / 2;
+
+  const [showNotif, setShowNotif] = useState(false);
+  const bellRef = useRef<View>(null);
+  const [bellY, setBellY] = useState(0);
+
+  const scA = useRef(new Animated.Value(0)).current;
+  const opA = useRef(new Animated.Value(0)).current;
+  const bgA = useRef(new Animated.Value(0)).current;
+  const rtA = useRef(new Animated.Value(0)).current;
+  const bbA = useRef(new Animated.Value(0)).current;
+
+  const unread = NOTIFS.filter(n => !n.read).length;
+
+  const openNotif = () => {
+    bellRef.current?.measure((x, y, w, h, px, py) => {
+      setBellY(py);
+      setShowNotif(true);
       Animated.parallel([
-        Animated.timing(backdropAnim, { toValue: 1, duration: 300, useNativeDriver: true, easing: Easing.out(Easing.ease) }),
-        Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, friction: 10, tension: 80 }),
-        Animated.timing(opacityAnim, { toValue: 1, duration: 350, delay: 100, useNativeDriver: true, easing: Easing.out(Easing.cubic) }),
-        Animated.spring(iconRotate, { toValue: 1, useNativeDriver: true, friction: 8, tension: 100 }),
-        Animated.timing(buttonBg, { toValue: 1, duration: 300, useNativeDriver: false }),
+        Animated.timing(bgA, { toValue: 1, duration: 260, useNativeDriver: true, easing: Easing.out(Easing.ease) }),
+        Animated.spring(scA, { toValue: 1, useNativeDriver: true, friction: 10, tension: 80 }),
+        Animated.timing(opA, { toValue: 1, duration: 280, delay: 70, useNativeDriver: true }),
+        Animated.spring(rtA, { toValue: 1, useNativeDriver: true, friction: 8, tension: 100 }),
+        Animated.timing(bbA, { toValue: 1, duration: 260, useNativeDriver: false }),
       ]).start();
     });
   };
 
-  const closeNotifications = () => {
+  const closeNotif = () => {
     Animated.parallel([
-      Animated.timing(backdropAnim, { toValue: 0, duration: 250, useNativeDriver: true }),
-      Animated.timing(scaleAnim, { toValue: 0, duration: 280, useNativeDriver: true, easing: Easing.in(Easing.back(1.2)) }),
-      Animated.timing(opacityAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
-      Animated.spring(iconRotate, { toValue: 0, useNativeDriver: true, friction: 8, tension: 100 }),
-      Animated.timing(buttonBg, { toValue: 0, duration: 250, useNativeDriver: false }),
-    ]).start(() => setShowNotifications(false));
+      Animated.timing(bgA, { toValue: 0, duration: 200, useNativeDriver: true }),
+      Animated.timing(scA, { toValue: 0, duration: 240, useNativeDriver: true, easing: Easing.in(Easing.back(1.2)) }),
+      Animated.timing(opA, { toValue: 0, duration: 160, useNativeDriver: true }),
+      Animated.spring(rtA, { toValue: 0, useNativeDriver: true, friction: 8, tension: 100 }),
+      Animated.timing(bbA, { toValue: 0, duration: 200, useNativeDriver: false }),
+    ]).start(() => setShowNotif(false));
   };
 
-  // Modal Transform Logic
-  const bellCenterX = (width - horizontalPadding - 42 - 10 - (headerIconSize / 2)); 
-  const modalTransform = [
-    { translateX: bellCenterX - width / 2 },
+  const bellCX = width - H_PAD - 42 - 10 - ICON / 2;
+  const modalT = [
+    { translateX: bellCX - width / 2 },
     { translateY: -(height / 2) + 100 },
-    { scale: scaleAnim.interpolate({ inputRange: [0, 1], outputRange: [0.01, 1] }) },
-    { translateX: -(bellCenterX - width / 2) },
-    { translateY: (height / 2) - 100 },
+    { scale: scA.interpolate({ inputRange: [0, 1], outputRange: [0.01, 1] }) },
+    { translateX: -(bellCX - width / 2) },
+    { translateY: height / 2 - 100 },
   ];
+  const rotDeg = rtA.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '90deg'] });
+  const rtSc   = rtA.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 0.8, 1] });
+  const bOp    = rtA.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 0, 0] });
+  const xOp    = rtA.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 0, 1] });
+  const bbCol  = bbA.interpolate({ inputRange: [0, 1], outputRange: [colors.surface.card, colors.brand.primary] });
 
-  const iconRotation = iconRotate.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '90deg'] });
-  const iconScale = iconRotate.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 0.8, 1] });
-  const bellOpacity = iconRotate.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 0, 0] });
-  const xOpacity = iconRotate.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 0, 1] });
-  const buttonBackgroundColor = buttonBg.interpolate({ 
-    inputRange: [0, 1], 
-    outputRange: [colors.surface.card, colors.brand.primary]
+  // ── Palette ──────────────────────────────────────────────────
+  const BG     = isDark ? '#161412' : '#F5F0EB';
+  const CARD   = isDark ? '#1E1A18' : '#FFFFFF';
+  const CARD_D = isDark ? '#111010' : '#1A1512'; // dark contrast card
+  const BORDER = isDark ? '#2C2724' : '#EAE4DC';
+  const T1     = isDark ? '#F0EBE4' : '#1A1512';
+  const T2     = isDark ? '#7A706A' : '#6B5E56';
+  const T3     = isDark ? '#443E3A' : '#C4B8B0';
+  const RED    = colors.brand.primary;
+
+  const cellShadow = {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: isDark ? 0.3 : 0.07,
+    shadowRadius: 10,
+    elevation: 3,
+  };
+
+  // ─── Reusable inline cell (avoid component for style flexibility) ─
+
+  const pressScale = (ref: Animated.Value) => ({
+    onPressIn: () => Animated.spring(ref, { toValue: 0.965, useNativeDriver: true, friction: 8, tension: 120 }).start(),
+    onPressOut: () => Animated.spring(ref, { toValue: 1, useNativeDriver: true, friction: 8, tension: 120 }).start(),
   });
+
+  const sc1 = useRef(new Animated.Value(1)).current;
+  const sc2 = useRef(new Animated.Value(1)).current;
+  const sc3 = useRef(new Animated.Value(1)).current;
+  const sc4 = useRef(new Animated.Value(1)).current;
+  const sc5 = useRef(new Animated.Value(1)).current;
 
   return (
     <ScreenFadeTransition>
-      <View style={[styles.root, { backgroundColor: colors.background.primary }]}>
+      <View style={{ flex: 1, backgroundColor: BG }}>
         <StatusBar style={isDark ? 'light' : 'dark'} translucent backgroundColor="transparent" />
-        <DecorativeBackground />
 
-        <View style={styles.mainLayout}>
-          {/* ============================================================ */}
-          {/* KONTAINER 1: FIXED HEADER (SAMA PERSIS) */}
-          {/* ============================================================ */}
-          <View style={[
-            styles.fixedHeaderContainer, 
-            { 
-              paddingTop: insets.top + 10,
-              paddingHorizontal: horizontalPadding,
-              backgroundColor: colors.background.primary, 
-              borderBottomColor: isDark ? colors.border.light : 'transparent',
-              borderBottomWidth: isDark ? 1 : 0,
-              zIndex: 20
-            }
-          ]}>
-            <View style={styles.headerContent}> 
-              <View style={styles.headerLeft}>
-                <View style={styles.headerTextContainer}>
-                  <Text style={[styles.greeting, { color: colors.text.secondary }]}>{getGreeting()},</Text>
-                  <Text style={[styles.name, { color: colors.text.primary }]} numberOfLines={1} ellipsizeMode="tail">
-                    {staff?.name ?? 'Staff'}
-                  </Text>
-                </View>
+        <View style={{ flex: 1 }}>
+
+          {/* ══ HEADER ════════════════════════════════════════ */}
+          <View style={[{
+            paddingTop: insets.top + 10,
+            paddingBottom: 14,
+            paddingHorizontal: H_PAD,
+            backgroundColor: BG,
+            borderBottomWidth: 1,
+            borderBottomColor: BORDER,
+            zIndex: 20,
+          }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+              <View>
+                <Text style={{ fontSize: 13, fontWeight: '500', color: T2, marginBottom: 2 }}>{getGreeting()},</Text>
+                <Text style={{ fontSize: 26, fontWeight: '800', color: T1, letterSpacing: -0.6 }} numberOfLines={1}>
+                  {staff?.name ?? 'Staff'}
+                </Text>
               </View>
-              
-              <View style={styles.headerRight}>
-                <View ref={bellRef} style={{ opacity: showNotifications ? 0 : 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View ref={bellRef} style={{ opacity: showNotif ? 0 : 1 }}>
                   <TouchableOpacity
-                    style={[styles.notificationBtn, { width: headerIconSize, height: headerIconSize, backgroundColor: colors.surface.card }]}
+                    style={{ width: ICON, height: ICON, borderRadius: 14, justifyContent: 'center', alignItems: 'center', backgroundColor: CARD, borderWidth: 1, borderColor: BORDER }}
                     activeOpacity={0.8}
-                    onPress={openNotifications}
+                    onPress={openNotif}
                   >
-                     <Bell size={22} color={colors.brand.primary} strokeWidth={2.5} />
-                     <View style={[styles.notificationBadge, { backgroundColor: colors.brand.primary, borderColor: colors.surface.card }]}>
-                        <Text style={styles.notificationBadgeText}>2</Text>
-                     </View>
+                    <Bell size={19} color={RED} strokeWidth={2} />
+                    {unread > 0 && <View style={{ position: 'absolute', top: 9, right: 9, width: 7, height: 7, borderRadius: 4, backgroundColor: RED }} />}
                   </TouchableOpacity>
                 </View>
-                <Image source={require('../../assets/images/logo1.webp')} style={styles.logoTopRight} resizeMode="contain" />
+                <Image source={require('../../assets/images/logo1.webp')} style={{ width: 46, height: 46 }} resizeMode="contain" />
               </View>
+            </View>
+
+            {/* Date chip */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 }}>
+              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: RED }} />
+              <Text style={{ fontSize: 12, fontWeight: '600', color: T2 }}>{TODAY}</Text>
             </View>
           </View>
 
-          {/* ============================================================ */}
-          {/* KONTAINER 2: SCROLLABLE CONTENT (KONTEN KASIR) */}
-          {/* ============================================================ */}
-          <ScrollView 
-            showsVerticalScrollIndicator={false} 
-            style={styles.scrollView} 
-            contentContainerStyle={[
-              styles.scrollContent, 
-              { 
-                paddingHorizontal: horizontalPadding, 
-                paddingBottom: 120 + insets.bottom,
-                paddingTop: 12 
-              }
-            ]}
+          {/* ══ BENTO SCROLL ══════════════════════════════════ */}
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: H_PAD, paddingTop: 16, paddingBottom: 120 + insets.bottom, gap: GAP }}
           >
-            {/* DI SINI ADALAH TEMPAT KONTEN DASHBOARD KASIR 
-               Elemen membership, wallet, dll sudah dihilangkan.
-            */}
-            <View style={styles.emptyContent}>
-                <Text style={{color: colors.text.secondary, textAlign: 'center'}}>
-                    Siap untuk menambahkan fitur Kasir (POS, Scan QR, Laporan).
+
+            {/* ══════════════════════════════════════════════
+                CELL 1 — Total Amount (HERO, full width)
+                Priority 1 — paling besar, paling dominan
+            ══════════════════════════════════════════════ */}
+            <Pressable onPress={() => navigation.navigate('TrxDetail')} {...pressScale(sc1)}>
+              <Animated.View style={[{
+                backgroundColor: CARD_D,
+                borderRadius: 22,
+                padding: 22,
+                height: 150,
+                justifyContent: 'space-between',
+                overflow: 'hidden',
+                transform: [{ scale: sc1 }],
+              }, cellShadow]}>
+                {/* Background texture — faint radial */}
+                <View style={{ position: 'absolute', right: -30, top: -30, width: 180, height: 180, borderRadius: 90, backgroundColor: 'rgba(255,255,255,0.03)' }} />
+                <View style={{ position: 'absolute', right: 30, bottom: -40, width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(255,255,255,0.025)' }} />
+
+                <Text style={{ fontSize: 11, fontWeight: '600', color: 'rgba(255,255,255,0.4)', letterSpacing: 1.2, textTransform: 'uppercase' }}>
+                  Total Transaksi Member
                 </Text>
+
+                <View>
+                  <Text style={{ fontSize: 42, fontWeight: '800', color: '#FFFFFF', letterSpacing: -1.5, lineHeight: 48 }}>
+                    {rp(DATA.totalAmount)}
+                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                    <View style={{ backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 }}>
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.75)' }}>
+                        {DATA.totalTrx} transaksi
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              </Animated.View>
+            </Pressable>
+
+            {/* ══════════════════════════════════════════════
+                ROW 2 — Voucher diredeem + Member tier
+                Priority 3 & 5 — dua kolom equal
+            ══════════════════════════════════════════════ */}
+            <View style={{ flexDirection: 'row', gap: GAP }}>
+
+              {/* CELL 2 — Voucher diredeem */}
+              <Pressable style={{ flex: 1 }} onPress={() => navigation.navigate('Voucher')} {...pressScale(sc2)}>
+                <Animated.View style={[{
+                  backgroundColor: CARD,
+                  borderRadius: 20,
+                  padding: 18,
+                  height: 130,
+                  borderWidth: 1,
+                  borderColor: BORDER,
+                  justifyContent: 'space-between',
+                  transform: [{ scale: sc2 }],
+                }, cellShadow]}>
+                  <Text style={{ fontSize: 10, fontWeight: '600', color: T3, letterSpacing: 1, textTransform: 'uppercase' }}>
+                    Voucher Diredeem
+                  </Text>
+                  <View>
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8 }}>
+                      <Text style={{ fontSize: 38, fontWeight: '800', color: T1, letterSpacing: -1, lineHeight: 42 }}>
+                        {DATA.voucherRedeemed}
+                      </Text>
+                      {DATA.pendingVouchers > 0 && (
+                        <View style={{ backgroundColor: RED, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, marginBottom: 4 }}>
+                          <Text style={{ fontSize: 10, fontWeight: '800', color: '#FFF' }}>
+                            {DATA.pendingVouchers} pending
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={{ fontSize: 11, color: T2, marginTop: 2 }}>hari ini</Text>
+                  </View>
+                </Animated.View>
+              </Pressable>
+
+              {/* CELL 3 — Member tier datang */}
+              <Pressable style={{ flex: 1 }} onPress={() => navigation.navigate('MemberDetail')} {...pressScale(sc3)}>
+                <Animated.View style={[{
+                  backgroundColor: CARD,
+                  borderRadius: 20,
+                  padding: 18,
+                  height: 130,
+                  borderWidth: 1,
+                  borderColor: BORDER,
+                  justifyContent: 'space-between',
+                  transform: [{ scale: sc3 }],
+                }, cellShadow]}>
+                  <Text style={{ fontSize: 10, fontWeight: '600', color: T3, letterSpacing: 1, textTransform: 'uppercase' }}>
+                    Tier Member
+                  </Text>
+
+                  {/* Compact tier list */}
+                  <View style={{ gap: 5 }}>
+                    {/* Stacked bar */}
+                    <View style={{ flexDirection: 'row', height: 5, borderRadius: 3, overflow: 'hidden', gap: 1 }}>
+                      {TIERS.map(t => (
+                        <View key={t.tier} style={{ flex: t.pct, backgroundColor: t.color + 'BB' }} />
+                      ))}
+                    </View>
+                    {/* Labels */}
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                      {TIERS.map(t => (
+                        <View key={t.tier} style={{ alignItems: 'center', gap: 2 }}>
+                          <Text style={{ fontSize: 14, fontWeight: '800', color: t.color }}>{t.count}</Text>
+                          <Text style={{ fontSize: 9, color: T2, fontWeight: '500' }}>{t.tier}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                </Animated.View>
+              </Pressable>
+
             </View>
+
+            {/* ══════════════════════════════════════════════
+                CELL 4 — History TRX (scrollable list)
+                Priority 2 — tall cell, fixed height, inner scroll
+            ══════════════════════════════════════════════ */}
+            <Pressable onPress={() => navigation.navigate('Riwayat')} {...pressScale(sc4)}>
+              <Animated.View style={[{
+                backgroundColor: CARD,
+                borderRadius: 20,
+                borderWidth: 1,
+                borderColor: BORDER,
+                overflow: 'hidden',
+                transform: [{ scale: sc4 }],
+              }, cellShadow]}>
+                {/* Header */}
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 18, paddingTop: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: BORDER }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: T1 }}>History Transaksi</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: RED }}>Lihat semua ›</Text>
+                </View>
+
+                {/* Trx rows — fixed 4-5 visible */}
+                {TRX.map((trx, i) => (
+                  <View key={trx.id}>
+                    <TouchableOpacity
+                      style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 13 }}
+                      activeOpacity={0.6}
+                      onPress={() => navigation.navigate('TrxDetail', { trxId: trx.id })}
+                    >
+                      {/* Tier strip */}
+                      <View style={{ width: 3, alignSelf: 'stretch', backgroundColor: TIER_COLOR[trx.memberTier], marginRight: 14, borderRadius: 2 }} />
+
+                      {/* Info */}
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: T1 }} numberOfLines={1}>{trx.memberName}</Text>
+                        <Text style={{ fontSize: 11, color: T2, marginTop: 2 }}>{timeAgo(trx.createdAt)}</Text>
+                      </View>
+
+                      {/* Amount + status */}
+                      <View style={{ alignItems: 'flex-end', paddingRight: 16, gap: 4 }}>
+                        <Text style={{ fontSize: 13, fontWeight: '800', color: T1 }}>
+                          Rp {trx.nominal.toLocaleString('id-ID')}
+                        </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                          <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: STATUS_COLOR[trx.status] }} />
+                          <Text style={{ fontSize: 10, fontWeight: '700', color: STATUS_COLOR[trx.status] }}>
+                            {trx.status.charAt(0).toUpperCase() + trx.status.slice(1)}
+                          </Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+
+                    {i < TRX.length - 1 && (
+                      <View style={{ height: 1, backgroundColor: BORDER, marginLeft: 17 }} />
+                    )}
+                  </View>
+                ))}
+              </Animated.View>
+            </Pressable>
+
+            {/* ══════════════════════════════════════════════
+                CELL 5 — Most redeemed voucher today
+                Priority 4 — full width, compact ranked list
+            ══════════════════════════════════════════════ */}
+            <Pressable onPress={() => navigation.navigate('Voucher')} {...pressScale(sc5)}>
+              <Animated.View style={[{
+                backgroundColor: CARD,
+                borderRadius: 20,
+                borderWidth: 1,
+                borderColor: BORDER,
+                overflow: 'hidden',
+                transform: [{ scale: sc5 }],
+              }, cellShadow]}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 18, paddingTop: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: BORDER }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: T1 }}>Voucher Terpopuler</Text>
+                  <Text style={{ fontSize: 11, color: T2 }}>hari ini</Text>
+                </View>
+
+                {TOP_VOUCHERS.map((v, i) => (
+                  <View key={v.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 18, borderBottomWidth: i < TOP_VOUCHERS.length - 1 ? 1 : 0, borderBottomColor: BORDER }}>
+                    {/* Rank number */}
+                    <Text style={{ fontSize: 13, fontWeight: '800', color: i === 0 ? RED : T3, width: 22 }}>
+                      {i + 1}
+                    </Text>
+                    <Text style={{ flex: 1, fontSize: 13, fontWeight: '600', color: T1 }} numberOfLines={1}>
+                      {v.title}
+                    </Text>
+                    {/* Count bar */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <View style={{ width: 60, height: 4, borderRadius: 2, backgroundColor: BORDER, overflow: 'hidden' }}>
+                        <View style={{ width: `${(v.count / TOP_VOUCHERS[0].count) * 100}%`, height: '100%', backgroundColor: i === 0 ? RED : T3, borderRadius: 2 }} />
+                      </View>
+                      <Text style={{ fontSize: 13, fontWeight: '800', color: i === 0 ? RED : T2, width: 16, textAlign: 'right' }}>
+                        {v.count}x
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </Animated.View>
+            </Pressable>
 
           </ScrollView>
         </View>
 
-        {/* --- MODAL NOTIFIKASI --- */}
-        <Modal visible={showNotifications} transparent animationType="none" statusBarTranslucent onRequestClose={closeNotifications}>
-          <Animated.View style={[StyleSheet.absoluteFill, { opacity: backdropAnim }]}>
-             {Platform.OS === 'ios' ? (
-                <BlurView intensity={30} style={StyleSheet.absoluteFill} tint={isDark ? 'light' : 'dark'} />
-             ) : (
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.6)' }]} />
-             )}
-             <TouchableOpacity style={StyleSheet.absoluteFill} onPress={closeNotifications} activeOpacity={1} />
+        {/* ══ NOTIFICATION MODAL ════════════════════════════ */}
+        <Modal visible={showNotif} transparent animationType="none" statusBarTranslucent onRequestClose={closeNotif}>
+          <Animated.View style={[StyleSheet.absoluteFill, { opacity: bgA }]}>
+            {Platform.OS === 'ios'
+              ? <BlurView intensity={30} style={StyleSheet.absoluteFill} tint={isDark ? 'light' : 'dark'} />
+              : <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.6)' }]} />
+            }
+            <TouchableOpacity style={StyleSheet.absoluteFill} onPress={closeNotif} activeOpacity={1} />
           </Animated.View>
 
-          <Animated.View style={[styles.modalContainer, { backgroundColor: colors.surface.card, top: insets.top + 10 + headerIconSize + 20, opacity: opacityAnim, transform: modalTransform }]}>
-             <View style={[styles.modalHeader, { borderBottomColor: colors.border.light }]}>
-                 <View style={{ flex: 1 }}>
-                    <Text style={[styles.modalTitle, { color: colors.text.primary }]}>Notifications</Text>
-                    <Text style={[styles.modalSubtitle, { color: colors.text.secondary }]}>Informasi sistem kasir</Text>
-                 </View>
-             </View>
-             <View style={[styles.notifListContainer, { backgroundColor: colors.background.tertiary }]}>
-                <FlatList
-                  data={NOTIFICATIONS}
-                  keyExtractor={item => item.id}
-                  contentContainerStyle={{ padding: 20 }}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity style={[styles.notifItem, { backgroundColor: colors.surface.card, shadowColor: colors.shadow.color }]} activeOpacity={0.7}>
-                       <View style={[styles.notifIconCircle, { backgroundColor: colors.background.elevated }]}>
-                          <Bell size={18} color={colors.text.secondary} />
-                       </View>
-                       <View style={{ flex: 1 }}>
-                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                             <Text style={[styles.notifItemTitle, { color: colors.text.primary }]}>{item.title}</Text>
-                             <Text style={[styles.notifTime, { color: colors.text.tertiary }]}>{item.time}</Text>
-                          </View>
-                          <Text style={[styles.notifBody, { color: colors.text.secondary }]}>{item.body}</Text>
-                       </View>
-                    </TouchableOpacity>
-                  )}
-                />
-             </View>
+          <Animated.View style={{
+            position: 'absolute', left: 10, right: 10,
+            top: insets.top + 10 + ICON + 20,
+            borderRadius: 24, overflow: 'hidden',
+            backgroundColor: CARD, elevation: 20,
+            maxHeight: '72%',
+            opacity: opA, transform: modalT,
+          }}>
+            <View style={{ paddingHorizontal: 18, paddingTop: 18, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: BORDER }}>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: T1 }}>Notifikasi</Text>
+              <Text style={{ fontSize: 12, color: T2, marginTop: 2 }}>{unread} belum dibaca</Text>
+            </View>
+            <FlatList
+              data={NOTIFS}
+              keyExtractor={i => i.id}
+              style={{ backgroundColor: BG }}
+              contentContainerStyle={{ padding: 12, gap: 8 }}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={{ padding: 13, borderRadius: 14, backgroundColor: CARD, borderLeftWidth: item.read ? 0 : 3, borderLeftColor: '#CA8A04' }}
+                  activeOpacity={0.7}
+                >
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: T1, flex: 1 }} numberOfLines={1}>{item.title}</Text>
+                    <Text style={{ fontSize: 10, color: T3 }}>{item.time}</Text>
+                  </View>
+                  <Text style={{ fontSize: 12, color: T2, lineHeight: 17 }}>{item.body}</Text>
+                </TouchableOpacity>
+              )}
+            />
+            <TouchableOpacity style={{ padding: 15, alignItems: 'center', borderTopWidth: 1, borderTopColor: BORDER, backgroundColor: CARD }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: RED }}>Tandai semua dibaca</Text>
+            </TouchableOpacity>
           </Animated.View>
 
-          {/* DUPLICATE FLOATING BELL */}
-          <Animated.View style={[styles.notificationBtn, { position: 'absolute', top: bellLayout.pageY > 0 ? bellLayout.pageY : (insets.top + 10 + 10), right: 20 + 42 + 10, width: headerIconSize, height: headerIconSize, backgroundColor: buttonBackgroundColor, zIndex: 9999, elevation: 10 }]}>
-             <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={0.8} onPress={closeNotifications}>
-                <Animated.View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center', transform: [{ rotate: iconRotation }, { scale: iconScale }] }]}>
-                   <Animated.View style={{ opacity: bellOpacity, position: 'absolute' }}><Bell size={22} color={colors.brand.primary} strokeWidth={2.5} /></Animated.View>
-                   <Animated.View style={{ opacity: xOpacity, position: 'absolute' }}><X size={22} color="#FFF" strokeWidth={2.5} /></Animated.View>
-                </Animated.View>
-             </TouchableOpacity>
+          {/* Floating bell clone */}
+          <Animated.View style={{
+            position: 'absolute',
+            top: bellY > 0 ? bellY : insets.top + 20,
+            right: H_PAD + 42 + 10,
+            width: ICON, height: ICON,
+            borderRadius: 14,
+            justifyContent: 'center', alignItems: 'center',
+            backgroundColor: bbCol,
+            zIndex: 9999, elevation: 10,
+          }}>
+            <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={0.8} onPress={closeNotif}>
+              <Animated.View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center', transform: [{ rotate: rotDeg }, { scale: rtSc }] }]}>
+                <Animated.View style={{ opacity: bOp, position: 'absolute' }}><Bell size={19} color={RED} strokeWidth={2} /></Animated.View>
+                <Animated.View style={{ opacity: xOp, position: 'absolute' }}><X   size={19} color="#FFF" strokeWidth={2} /></Animated.View>
+              </Animated.View>
+            </TouchableOpacity>
           </Animated.View>
         </Modal>
 
@@ -229,34 +549,3 @@ export default function DashboardScreen() {
     </ScreenFadeTransition>
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1, position: 'relative' },
-  mainLayout: { flex: 1 }, 
-  fixedHeaderContainer: { paddingBottom: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 3 },
-  headerContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 },
-  scrollView: { flex: 1 },
-  scrollContent: { paddingHorizontal: 24, paddingBottom: 120 },
-  emptyContent: { marginTop: 100, alignItems: 'center', justifyContent: 'center' },
-
-  headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, paddingRight: 10 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  headerTextContainer: { justifyContent: 'center' },
-  greeting: { fontSize: 15, fontWeight: '600', marginBottom: 2 },
-  name: { fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
-  notificationBtn: { borderRadius: 16, justifyContent: 'center', alignItems: 'center', elevation: 4 },
-  notificationBadge: { position: 'absolute', top: 12, right: 14, width: 8, height: 8, borderRadius: 4, borderWidth: 1 },
-  notificationBadgeText: { display: 'none' },
-  logoTopRight: { width: 50, height: 50 },
-
-  modalContainer: { position: 'absolute', left: 10, right: 10, borderRadius: 32, overflow: 'hidden', elevation: 20, maxHeight: '75%' },
-  modalHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 16, borderBottomWidth: 1 },
-  modalTitle: { fontSize: 24, fontWeight: 'bold' },
-  modalSubtitle: { fontSize: 14 },
-  notifListContainer: { flex: 1 },
-  notifItem: { flexDirection: 'row', padding: 16, borderRadius: 20, marginBottom: 16 },
-  notifIconCircle: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
-  notifItemTitle: { fontSize: 15, fontWeight: 'bold' },
-  notifTime: { fontSize: 11 },
-  notifBody: { fontSize: 13, marginTop: 4 },
-});
