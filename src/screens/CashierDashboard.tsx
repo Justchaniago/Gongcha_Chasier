@@ -22,8 +22,10 @@ import { QrCode, TrendingUp, Users, Ticket, Crown, X, ChevronRight, Activity, Ca
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 
-// --- TAMBAHAN IMPORT ZUSTAND STORE ---
+// --- IMPORT ZUSTAND & FIREBASE ---
 import { useCashierStore } from '../store/useCashierStore';
+import { doc, getDoc } from 'firebase/firestore';
+import { firestoreDb } from '../config/firebase';
 
 const { width, height } = Dimensions.get('window');
 
@@ -55,7 +57,6 @@ const TAB_SEGMENT_WIDTH = (TAB_TRACK_WIDTH - (TAB_TRACK_PADDING * 2)) / TABS.len
 type ModalType = 'REVENUE' | 'MEMBERS' | 'TIERS' | 'PROMOS' | 'RECEIPT' | null; 
 type HistorySubTab = 'TRANSACTIONS' | 'REDEMPTIONS'; 
 
-// --- HELPER FUNGSI RUPIAH ---
 const formatRupiah = (angka: number) => {
   return angka.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 };
@@ -91,10 +92,8 @@ const REDEEM_HISTORY_DATA = [
 
 const SquishyBento = ({ onPress, style, children }: any) => {
   const scale = useRef(new Animated.Value(1)).current;
-
   const handlePressIn = () => { Animated.spring(scale, { toValue: 0.95, useNativeDriver: true, friction: 6 }).start(); };
   const handlePressOut = () => { Animated.spring(scale, { toValue: 1, useNativeDriver: true, friction: 5 }).start(); };
-
   return (
     <TouchableWithoutFeedback onPressIn={handlePressIn} onPressOut={handlePressOut} onPress={onPress}>
       <Animated.View style={[style, { transform: [{ scale }] }]}>{children}</Animated.View>
@@ -102,7 +101,7 @@ const SquishyBento = ({ onPress, style, children }: any) => {
   );
 };
 
-// --- MODERN SCANNER OVERLAY (MATHEMATICALLY PERFECT) ---
+// --- MODERN SCANNER OVERLAY ---
 const ScannerOverlay = ({ visible, onClose, onSuccessScan }: { visible: boolean, onClose: () => void, onSuccessScan: (data: string) => void }) => {
   const insets = useSafeAreaInsets();
   const opacityAnim = useRef(new Animated.Value(0)).current;
@@ -148,13 +147,11 @@ const ScannerOverlay = ({ visible, onClose, onSuccessScan }: { visible: boolean,
       </View>
 
       <View style={styles.darkHoleOverlay} pointerEvents="none" />
-
       <View style={styles.viewfinderCenterFrame} pointerEvents="none">
          <View style={styles.viewfinderHole} />
       </View>
 
       <View style={styles.scannerUIContainer} pointerEvents="box-none">
-        
         <View style={[styles.scannerHeaderGrid, { marginTop: Platform.OS === 'android' ? insets.top + 20 : insets.top || 20 }]}> 
           <View style={styles.scannerHeaderLeft}>
             <Pressable style={styles.scannerCloseBtn} onPress={onClose}>
@@ -179,18 +176,16 @@ const ScannerOverlay = ({ visible, onClose, onSuccessScan }: { visible: boolean,
               <Text style={styles.dummySimulateText}>Simulate Scan</Text>
           </Pressable>
         </View>
-
       </View>
     </Animated.View>
   );
 };
 
-// --- REDESIGNED: THE APPLE-WALLET STYLE MEMBER PAGE (REACTIVE) ---
+// --- REAKTIF MEMBER PAGE ---
 const MemberDetailPage = ({ visible, onClose }: { visible: boolean, onClose: () => void }) => {
   const insets = useSafeAreaInsets();
   const slideAnim = useRef(new Animated.Value(width)).current; 
 
-  // AMBIL DATA DARI ZUSTAND
   const activeMember = useCashierStore((state) => state.activeMember);
   const processTransaction = useCashierStore((state) => state.processTransaction);
 
@@ -202,23 +197,15 @@ const MemberDetailPage = ({ visible, onClose }: { visible: boolean, onClose: () 
     }
   }, [visible]);
 
-  // FUNGSI SIMULASI CHECKOUT
   const handleCharge = () => {
-    processTransaction(45000, true); // Tambah Rp 45rb & Tambah 1 Member Visit
+    processTransaction(45000, true); 
     onClose();
   };
 
-  // Jangan render jika tidak ada data member
   if (!activeMember) return null;
 
   return (
-    <Animated.View 
-      style={[
-        styles.pageContainer, 
-        { transform: [{ translateX: slideAnim }] },
-        !visible ? { pointerEvents: 'none' } : {} 
-      ]}
-    >
+    <Animated.View style={[styles.pageContainer, { transform: [{ translateX: slideAnim }] }, !visible ? { pointerEvents: 'none' } : {} ]}>
       <View style={styles.pageBackground} />
       <View style={[styles.floatingHeader, { top: insets.top + 10 }]}>
          <Pressable style={styles.floatingBackPill} onPress={onClose}>
@@ -280,6 +267,7 @@ const MemberDetailPage = ({ visible, onClose }: { visible: boolean, onClose: () 
 
 
 export default function CashierDashboard() {
+  const [syncStatus, setSyncStatus] = useState<"live" | "updated" | "offline" | "error">("live");
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<number>(0);
   
@@ -292,24 +280,57 @@ export default function CashierDashboard() {
   const [isScannerVisible, setIsScannerVisible] = useState(false);
   const [isMemberPageVisible, setIsMemberPageVisible] = useState(false);
 
-  // --- ZUSTAND STORE INTEGRATION ---
-  const { totalRevenue, memberVisits, staff, setActiveMember, syncData } = useCashierStore();
-  // Ekstrak nama toko dari data Firebase aslimu!
-  // Ambil outlet pertama dari array storeLocations
-  const storeName = staff?.storeLocations?.[0] || 'Loading Store...';
-
-
+  // --- ZUSTAND STORE ---
+  const { totalRevenue, memberVisits, staff, setActiveMember, syncData, logout } = useCashierStore();
   
+  const [storeName, setStoreName] = useState('Loading Store...');
+
+  // --- ROBUST FIRESTORE FETCHER (MENGGUNAKAN namePlace) ---
+  useEffect(() => {
+    const fetchStoreName = async () => {
+      try {
+        const storeId = Array.isArray((staff as any)?.storeLocations) 
+          ? (staff as any)?.storeLocations[0] 
+          : staff?.storeLocations;
+
+        if (!storeId || storeId === 'Unknown Location') {
+          setStoreName('Unknown Store');
+          return;
+        }
+
+        const storeDocRef = doc(firestoreDb, 'stores', storeId);
+        const storeDoc = await getDoc(storeDocRef);
+        
+        if (storeDoc.exists()) {
+          const storeData = storeDoc.data();
+          // 🔥 PERMINTAAN USER: Ganti ke namePlace
+          setStoreName(storeData.namePlace || storeData.name || 'Unknown Store');
+        } else {
+          setStoreName(storeId);
+        }
+      } catch (err) {
+        console.log('Firestore fetch error:', err);
+        const loc = staff?.storeLocations;
+        if (Array.isArray(loc)) {
+          setStoreName(loc[0] || 'Unknown Store');
+        } else if (typeof loc === 'string') {
+          setStoreName(loc);
+        } else {
+          setStoreName('Unknown Store');
+        }
+      }
+    };
+    
+    if (staff) fetchStoreName();
+  }, [staff]);
+
   const SHEET_HIDDEN = height; 
   const SHEET_HALF = height * 0.4; 
   const SHEET_FULL = 0;
 
   const modalY = useRef(new Animated.Value(SHEET_HIDDEN)).current;
   const lastModalY = useRef(SHEET_HIDDEN);
-
-  // Animasi Sync Spin
   const spinAnim = useRef(new Animated.Value(0)).current;
-
   const flatListRef = useRef<Animated.FlatList<any>>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
 
@@ -341,7 +362,6 @@ export default function CashierDashboard() {
   const openModal = (type: ModalType, data: any = null) => {
     setActiveModal(type);
     if (data) setSelectedTrx(data);
-
     let targetY = SHEET_HALF;
     if (type === 'RECEIPT') {
       targetY = insets.top > 0 ? insets.top + 40 : 40; 
@@ -349,7 +369,6 @@ export default function CashierDashboard() {
     } else {
       setIsFullScreen(false);
     }
-
     lastModalY.current = targetY;
     Animated.spring(modalY, { toValue: targetY, useNativeDriver: false, friction: 8, tension: 60 }).start();
   };
@@ -385,7 +404,6 @@ export default function CashierDashboard() {
         }
 
         lastModalY.current = toValue;
-        
         Animated.spring(modalY, { toValue, useNativeDriver: false, friction: 8, tension: 50 }).start(() => {
           if (toValue === SHEET_HIDDEN) {
             setActiveModal(null);
@@ -402,11 +420,8 @@ export default function CashierDashboard() {
   const morphPaddingTop = modalY.interpolate({ inputRange: [SHEET_FULL, SHEET_HALF], outputRange: [insets.top + 10, 10], extrapolate: 'clamp' });
   const morphChartHeight = modalY.interpolate({ inputRange: [SHEET_FULL, SHEET_HALF], outputRange: [240, 160], extrapolate: 'clamp' });
 
-  // --- ZUSTAND: HANDLER SCAN CAMERA ---
   const handleSimulateScan = (data: string) => {
     setIsScannerVisible(false); 
-    
-    // Inject data ke Zustand dari hasil QR
     setActiveMember({
       uid: data,
       name: 'Budi Santoso',
@@ -415,25 +430,26 @@ export default function CashierDashboard() {
       tier: 'GOLD',
       walletBalance: 250000
     });
-
     setIsMemberPageVisible(true); 
   };
 
-  // --- ZUSTAND: HANDLER SYNC DATABASE (SPIN ANIMATION) ---
+  // --- PERBAIKAN HANDLE SYNC ---
   const handleSyncDatabase = async () => {
     spinAnim.setValue(0);
+    setSyncStatus('updated');
     Animated.loop(Animated.timing(spinAnim, { toValue: 1, duration: 1000, useNativeDriver: true })).start();
     
-    // Panggil fungsi Zustand async
-    await syncData();
-    
-    Animated.timing(spinAnim, { toValue: 0, duration: 300, useNativeDriver: true }).stop();
+    try {
+      await syncData();
+      setSyncStatus('live');
+    } catch (err) {
+      setSyncStatus('error');
+    } finally {
+      Animated.timing(spinAnim, { toValue: 0, duration: 300, useNativeDriver: true }).stop();
+    }
   };
 
-  const spin = spinAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg']
-  });
+  const spin = spinAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
 
   const renderFilterBar = () => {
     const dateStr = new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
@@ -450,6 +466,7 @@ export default function CashierDashboard() {
     );
   };
 
+  // --- RESTORED DIGITAL RECEIPT ---
   const renderDigitalReceipt = () => {
     if (!selectedTrx) return null;
     return (
@@ -464,7 +481,7 @@ export default function CashierDashboard() {
             <Text style={styles.receiptBrand}>GONG CHA</Text>
             <View style={{flexDirection: 'row', alignItems: 'center', marginTop: 4, marginBottom: 16}}>
               <MapPin size={12} color={DESIGN.textSecondary} style={{marginRight: 4}} />
-              <Text style={styles.receiptStore}>Tunjungan Plaza, SBY</Text>
+              <Text style={styles.receiptStore}>{storeName}</Text>
             </View>
             <Text style={styles.receiptDate}>27 Feb 2026 • {selectedTrx.time}</Text>
             <Text style={styles.receiptTrxId}>{selectedTrx.id}</Text>
@@ -617,7 +634,6 @@ export default function CashierDashboard() {
                 </View>
                 <View style={styles.heroBottom}>
                   <Text style={styles.heroLabel}>Total Revenue Today</Text>
-                  {/* --- NILAI REVENUE DARI ZUSTAND --- */}
                   <Text style={styles.heroValue}><Text style={styles.currency}>Rp</Text> {formatRupiah(totalRevenue)}</Text>
                 </View>
               </SquishyBento>
@@ -626,7 +642,6 @@ export default function CashierDashboard() {
                 <SquishyBento onPress={() => openModal('MEMBERS')} style={[styles.bentoBox, styles.bentoBoxSmall]}>
                    <View style={styles.iconWrapperDark}><Users size={22} color={DESIGN.surface} /></View>
                    <View>
-                      {/* --- NILAI VISITS DARI ZUSTAND --- */}
                       <Text style={styles.bentoValue}>{memberVisits}</Text>
                       <Text style={styles.bentoLabel}>Member Visits</Text>
                    </View>
@@ -700,16 +715,28 @@ export default function CashierDashboard() {
           </View>
         )}
 
-        {/* --- HALAMAN PROFILE --- */}
         {item === 'PROFILE' && (
              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.profileContainer}>
                 <View style={styles.profileHero}>
                    <View style={styles.profileAvatarBox}>
                       <Store size={40} color={DESIGN.textPrimary} />
                    </View>
-                   {/* --- NAMA TOKO DARI ZUSTAND --- */}
-                   <Text style={styles.profileStoreName}>{storeName}</Text>
-                   <Text style={styles.profileStoreLocation}>{storeName}</Text>
+                   <Text
+                      style={[
+                        styles.locationTitle,
+                        {
+                          fontSize: storeName.length > 22 ? 18 : 24,
+                          maxWidth: width - 80,
+                          textAlign: 'center',
+                          marginBottom: 8
+                        },
+                      ]}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit={true}
+                      minimumFontScale={0.7}
+                    >
+                      {storeName}
+                    </Text>
                    
                    <View style={styles.profileStatusBadge}>
                       <View style={styles.statusDot} />
@@ -734,7 +761,7 @@ export default function CashierDashboard() {
 
                    <View style={styles.actionDivider} />
 
-                   <Pressable style={({pressed}) => [styles.profileActionRow, pressed && {backgroundColor: DESIGN.canvas}]} onPress={() => console.log('Logout pressed')}>
+                   <Pressable style={({pressed}) => [styles.profileActionRow, pressed && {backgroundColor: DESIGN.canvas}]} onPress={logout}>
                       <View style={styles.profileActionLeft}>
                          <View style={[styles.actionIconBox, {backgroundColor: 'rgba(211, 35, 42, 0.1)'}]}>
                             <LogOut size={20} color={DESIGN.brandRed} />
@@ -756,16 +783,45 @@ export default function CashierDashboard() {
       <StatusBar barStyle="dark-content" backgroundColor={DESIGN.canvas} />
       
       <SafeAreaView style={styles.safeArea}>
+        
+        {/* --- REPOSISI HEADER --- */}
         <View style={styles.header}>
-          <View>
-            <Text style={styles.eyebrow}>{getGreeting()}</Text>
-            {/* --- NAMA TOKO DARI ZUSTAND --- */}
-            <Text style={styles.locationTitle}>{storeName}.</Text>
+          
+          {/* BAGIAN KIRI: Logo -> Greeting -> Nama Toko */}
+          <View style={styles.headerLeft}>
+            <Image
+              source={require('../../assets/images/logo1.webp')}
+              style={styles.headerLogo}
+              resizeMode="contain"
+            />
+            <View style={styles.headerTextContainer}>
+              <Text style={styles.eyebrow}>{getGreeting()}</Text>
+              <Text
+                style={[
+                  styles.locationTitle,
+                  { fontSize: storeName.length > 20 ? 18 : 22 }
+                ]}
+                numberOfLines={1}
+                adjustsFontSizeToFit={true}
+                minimumFontScale={0.7}
+              >
+                {storeName}
+              </Text>
+            </View>
           </View>
-          <View style={styles.avatarPremium}>
-            <Image source={require('../../assets/images/logo1.webp')} style={styles.logoImage} resizeMode="contain" />
-            <View style={styles.onlineDot} />
+
+          {/* BAGIAN KANAN: Status Pill */}
+          <View style={styles.headerRight}>
+            <View style={[
+              styles.statusPill, 
+              { backgroundColor: syncStatus === 'live' ? '#34C759' : syncStatus === 'updated' ? '#007AFF' : syncStatus === 'offline' ? '#FF9500' : '#FF3B30' }
+            ]}>
+              <Text style={styles.statusPillText}>
+                {syncStatus === 'live' ? 'LIVE' : syncStatus === 'updated' ? 'UPDATED' : syncStatus === 'offline' ? 'OFFLINE' : 'ERROR'}
+              </Text>
+            </View>
           </View>
+
         </View>
 
         <View style={styles.tabTrackWrapper}>
@@ -816,27 +872,8 @@ const styles = StyleSheet.create({
     scannerContainer: { ...StyleSheet.absoluteFillObject, zIndex: 999, backgroundColor: '#000' },
     cameraLayer: { ...StyleSheet.absoluteFillObject, zIndex: 1 },
     noCameraBox: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#111' },
-    darkHoleOverlay: {
-      position: 'absolute',
-      top: height / 2 - 130 - 1000,   
-      left: width / 2 - 130 - 1000,   
-      width: 260 + 2000,              
-      height: 260 + 2000,
-      borderWidth: 1000,
-      borderRadius: 1048,             
-      borderColor: 'rgba(0,0,0,0.85)',
-      zIndex: 2,
-    },
-    viewfinderCenterFrame: { 
-       position: 'absolute', 
-       top: height / 2 - 130, 
-       left: width / 2 - 130,
-       width: 260, 
-       height: 260, 
-       justifyContent: 'center', 
-       alignItems: 'center',
-       zIndex: 3
-    },
+    darkHoleOverlay: { position: 'absolute', top: height / 2 - 130 - 1000, left: width / 2 - 130 - 1000, width: 260 + 2000, height: 260 + 2000, borderWidth: 1000, borderRadius: 1048, borderColor: 'rgba(0,0,0,0.85)', zIndex: 2 },
+    viewfinderCenterFrame: { position: 'absolute', top: height / 2 - 130, left: width / 2 - 130, width: 260, height: 260, justifyContent: 'center', alignItems: 'center', zIndex: 3 },
     viewfinderHole: { width: 260, height: 260, borderRadius: 48, borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)' },
     scannerUIContainer: { ...StyleSheet.absoluteFillObject, zIndex: 4, justifyContent: 'space-between' },
     scannerHeaderGrid: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, height: 44 },
@@ -850,14 +887,21 @@ const styles = StyleSheet.create({
     scannerInstruction: { color: DESIGN.surface, fontSize: 15, fontWeight: '600', marginBottom: 40, textAlign: 'center', opacity: 0.8 },
     dummySimulateBtn: { backgroundColor: DESIGN.surface, paddingVertical: 18, paddingHorizontal: 40, borderRadius: 100, shadowColor: '#000', shadowOffset: {width: 0, height: 10}, shadowOpacity: 0.3, shadowRadius: 20 },
     dummySimulateText: { color: DESIGN.textPrimary, fontSize: 16, fontWeight: '900', letterSpacing: 0.5 },
-  logoImage: { width: 28, height: 28 },
-  onlineDot: { position: 'absolute', bottom: 0, right: 0, width: 14, height: 14, borderRadius: 7, backgroundColor: '#34C759', borderWidth: 2, borderColor: DESIGN.surface },
+  
   root: { flex: 1, backgroundColor: DESIGN.canvas },
   safeArea: { flex: 1 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', paddingHorizontal: 24, paddingTop: 16, paddingBottom: 24 },
-  eyebrow: { fontSize: 13, fontWeight: '700', color: DESIGN.textSecondary, letterSpacing: 0.5, marginBottom: 4, textTransform: 'uppercase' },
-  locationTitle: { fontSize: 32, fontWeight: '900', color: DESIGN.textPrimary, letterSpacing: -1.2, lineHeight: 36 },
-  avatarPremium: { width: 48, height: 48, borderRadius: 24, backgroundColor: DESIGN.surface, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 3 },
+
+  // --- REWORKED HEADER STYLES ---
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingTop: 16, paddingBottom: 24 },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, paddingRight: 12 },
+  headerLogo: { width: 44, height: 44, marginRight: 12 },
+  headerTextContainer: { flex: 1, justifyContent: 'center' },
+  eyebrow: { fontSize: 13, fontWeight: '700', color: DESIGN.textSecondary, letterSpacing: 0.5, marginBottom: 2, textTransform: 'uppercase' },
+  locationTitle: { fontWeight: '900', color: DESIGN.textPrimary, letterSpacing: -1 },
+  headerRight: { justifyContent: 'center', alignItems: 'flex-end' },
+  statusPill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: {width: 0, height: 2}, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
+  statusPillText: { color: '#FFF', fontWeight: 'bold', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 },
+  // ------------------------------
   
   tabTrackWrapper: { paddingHorizontal: SCREEN_PADDING, marginBottom: 24 },
   tabTrack: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.04)', padding: TAB_TRACK_PADDING, borderRadius: 100, position: 'relative' },
@@ -887,15 +931,12 @@ const styles = StyleSheet.create({
   iconWrapperGold: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(212, 175, 55, 0.1)', justifyContent: 'center', alignItems: 'center' },
   bentoValue: { fontSize: 28, fontWeight: '900', color: DESIGN.textPrimary, letterSpacing: -1 },
   bentoLabel: { fontSize: 13, fontWeight: '600', color: DESIGN.textSecondary },
-  comingSoonBox: { height: 200, borderRadius: 32, borderWidth: 2, borderColor: 'rgba(0,0,0,0.05)', borderStyle: 'dashed', justifyContent: 'center', alignItems: 'center' },
-  comingSoonText: { fontSize: 20, fontWeight: '800', color: 'rgba(0,0,0,0.2)', letterSpacing: 2 },
   
   floatingWrapper: { position: 'absolute', bottom: Platform.OS === 'ios' ? 40 : 24, alignSelf: 'center' },
   scanPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: DESIGN.brandRed, padding: 8, paddingRight: 32, borderRadius: 100, shadowColor: DESIGN.brandRed, shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.4, shadowRadius: 24, elevation: 12 },
   scanIconBox: { width: 48, height: 48, borderRadius: 24, backgroundColor: DESIGN.surface, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
   scanText: { color: DESIGN.surface, fontSize: 16, fontWeight: '900', letterSpacing: 1.5 },
 
-  // --- DUAL HISTORY STYLES ---
   subTabContainer: { paddingHorizontal: 24, paddingBottom: 16 },
   subTabTrack: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: 12, padding: 4 },
   subTabItem: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8 },
@@ -917,7 +958,6 @@ const styles = StyleSheet.create({
   historyPointBadge: { marginLeft: 8, backgroundColor: 'rgba(255, 159, 10, 0.1)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   historyPointText: { fontSize: 10, fontWeight: '800', color: DESIGN.outstandingOrange },
 
-  // --- PROFILE TAB STYLES ---
   profileContainer: { paddingHorizontal: 24, paddingBottom: 40 },
   profileHero: { alignItems: 'center', paddingVertical: 32 },
   profileAvatarBox: { width: 80, height: 80, borderRadius: 40, backgroundColor: DESIGN.surface, justifyContent: 'center', alignItems: 'center', marginBottom: 16, shadowColor: '#000', shadowOffset: {width:0, height:8}, shadowOpacity: 0.05, shadowRadius: 16 },
@@ -935,7 +975,6 @@ const styles = StyleSheet.create({
   actionDivider: { width: '100%', height: 1, backgroundColor: DESIGN.canvas, marginLeft: 72 }, 
   appVersionText: { textAlign: 'center', marginTop: 32, fontSize: 13, fontWeight: '500', color: 'rgba(0,0,0,0.3)' },
 
-  // --- MODAL STYLES ---
   modalOverlay: { flex: 1 },
   modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: '#000' },
   modalSheetContainer: { position: 'absolute', bottom: 0, left: 0, right: 0, height: height, backgroundColor: DESIGN.surface, borderTopLeftRadius: 36, borderTopRightRadius: 36, shadowColor: '#000', shadowOffset: { width: 0, height: -10 }, shadowOpacity: 0.15, shadowRadius: 30, elevation: 20 },
@@ -976,7 +1015,6 @@ const styles = StyleSheet.create({
   promoTitle: { fontSize: 16, fontWeight: '800', color: DESIGN.textPrimary, marginBottom: 4 },
   promoCount: { fontSize: 14, color: DESIGN.textSecondary, fontWeight: '500' },
 
-  // --- DIGITAL RECEIPT STYLES ---
   receiptPaper: { marginHorizontal: 16, backgroundColor: DESIGN.receiptPaper, borderTopLeftRadius: 24, borderTopRightRadius: 24, shadowColor: '#000', shadowOffset: {width: 0, height: 10}, shadowOpacity: 0.2, shadowRadius: 20, elevation: 15, overflow: 'hidden' },
   receiptDragHandle: { width: 40, height: 5, borderRadius: 3, backgroundColor: 'rgba(0,0,0,0.1)', alignSelf: 'center', marginTop: 12 },
   closeReceiptBtn: { position: 'absolute', top: 16, right: 16, zIndex: 10, padding: 8 },
@@ -1016,8 +1054,6 @@ const styles = StyleSheet.create({
   receiptPaymentInfo: { alignItems: 'center', paddingVertical: 12, backgroundColor: 'rgba(0,0,0,0.03)', borderRadius: 12 },
   receiptPaymentText: { fontSize: 14, fontWeight: '700', color: DESIGN.textSecondary, marginLeft: 8 },
 
-
-  // --- NEW: THE APPLE WALLET MEMBER PAGE ---
   pageContainer: { ...StyleSheet.absoluteFillObject, zIndex: 1000 },
   pageBackground: { ...StyleSheet.absoluteFillObject, backgroundColor: DESIGN.canvas },
   floatingHeader: { position: 'absolute', left: 20, zIndex: 10 },
