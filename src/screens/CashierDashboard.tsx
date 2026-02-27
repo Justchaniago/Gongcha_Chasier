@@ -20,6 +20,10 @@ import {
 } from 'react-native';
 import { QrCode, TrendingUp, Users, Ticket, Crown, X, ChevronRight, Activity, Calendar, Filter, ScanLine, ArrowLeft, Star, CreditCard, ShoppingBag, Banknote, Smartphone, Clock, CheckCircle2, MapPin, Store, RefreshCcw, LogOut } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+
+// --- TAMBAHAN IMPORT ZUSTAND STORE ---
+import { useCashierStore } from '../store/useCashierStore';
 
 const { width, height } = Dimensions.get('window');
 
@@ -50,6 +54,11 @@ const TAB_SEGMENT_WIDTH = (TAB_TRACK_WIDTH - (TAB_TRACK_PADDING * 2)) / TABS.len
 
 type ModalType = 'REVENUE' | 'MEMBERS' | 'TIERS' | 'PROMOS' | 'RECEIPT' | null; 
 type HistorySubTab = 'TRANSACTIONS' | 'REDEMPTIONS'; 
+
+// --- HELPER FUNGSI RUPIAH ---
+const formatRupiah = (angka: number) => {
+  return angka.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+};
 
 // --- DATA DUMMY HISTORY ---
 const TRX_HISTORY_DATA = [
@@ -93,26 +102,60 @@ const SquishyBento = ({ onPress, style, children }: any) => {
   );
 };
 
-// --- MODERN SCANNER OVERLAY ---
-const ScannerOverlay = ({ visible, onClose, onSimulateSuccess }: { visible: boolean, onClose: () => void, onSimulateSuccess: () => void }) => {
+// --- MODERN SCANNER OVERLAY (MATHEMATICALLY PERFECT) ---
+const ScannerOverlay = ({ visible, onClose, onSuccessScan }: { visible: boolean, onClose: () => void, onSuccessScan: (data: string) => void }) => {
   const insets = useSafeAreaInsets();
   const opacityAnim = useRef(new Animated.Value(0)).current;
+  
+  const [permission, requestPermission] = useCameraPermissions();
+  const [scanned, setScanned] = useState(false);
 
   useEffect(() => {
     if (visible) {
+      setScanned(false); 
       Animated.timing(opacityAnim, { toValue: 1, duration: 250, useNativeDriver: true }).start();
     } else {
       Animated.timing(opacityAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start();
     }
   }, [visible]);
 
+  const handleBarcodeScanned = ({ type, data }: { type: string, data: string }) => {
+    if (scanned) return; 
+    setScanned(true); 
+    onSuccessScan(data);
+  };
+
   if (!visible) return null;
 
   return (
-    <Animated.View style={[styles.scannerContainer, { opacity: opacityAnim }]}>
-      <View style={styles.scannerBackdrop} />
-      <SafeAreaView style={styles.scannerHeaderContainer}>
-        <View style={styles.scannerHeaderGrid}>
+    <Animated.View style={[styles.scannerContainer, { opacity: opacityAnim }]}> 
+      <View style={styles.cameraLayer}>
+         {(!permission || !permission.granted) ? (
+            <View style={styles.noCameraBox}>
+              <Text style={{color: 'white', marginBottom: 20}}>Camera Access Required</Text>
+              <Pressable style={styles.dummySimulateBtn} onPress={requestPermission}>
+                 <Text style={styles.dummySimulateText}>Grant Access</Text>
+              </Pressable>
+            </View>
+         ) : (
+            <CameraView 
+               style={StyleSheet.absoluteFillObject} 
+               facing="back"
+               barcodeScannerSettings={{ barcodeTypes: ["qr"] }} 
+               onBarcodeScanned={scanned ? undefined : handleBarcodeScanned} 
+            />
+         )}
+      </View>
+
+      <View style={styles.darkHoleOverlay} pointerEvents="none" />
+
+      <View style={styles.viewfinderCenterFrame} pointerEvents="none">
+         <View style={styles.viewfinderHole} />
+      </View>
+
+      <View style={styles.scannerUIContainer} pointerEvents="box-none">
+        
+        <View style={[styles.scannerHeaderGrid, { marginTop: Platform.OS === 'android' ? insets.top + 20 : insets.top || 20 }]}> 
           <View style={styles.scannerHeaderLeft}>
             <Pressable style={styles.scannerCloseBtn} onPress={onClose}>
                <X size={22} color={DESIGN.surface} />
@@ -126,27 +169,30 @@ const ScannerOverlay = ({ visible, onClose, onSimulateSuccess }: { visible: bool
           </View>
           <View style={styles.scannerHeaderRight} />
         </View>
-      </SafeAreaView>
-      <View style={styles.viewfinderWrapper}>
-         <View style={styles.viewfinderHole} />
-      </View>
-      <View style={[styles.scannerFooter, { paddingBottom: insets.bottom + 40 }]}>
-         <Text style={styles.scannerInstruction}>Hold camera over QR Code</Text>
-         <Pressable 
-           style={({pressed}) => [styles.dummySimulateBtn, pressed && {opacity: 0.8, transform: [{scale: 0.95}]}]} 
-           onPress={onSimulateSuccess}
-         >
-            <Text style={styles.dummySimulateText}>Simulate Scan</Text>
-         </Pressable>
+
+        <View style={[styles.scannerFooter, { marginBottom: insets.bottom + 40 }]}> 
+          <Text style={styles.scannerInstruction}>Hold camera over Member QR</Text>
+          <Pressable 
+            style={({pressed}) => [styles.dummySimulateBtn, pressed && {opacity: 0.8, transform: [{scale: 0.95}]}]} 
+            onPress={() => onSuccessScan("DUMMY_MEMBER_ID_0812")}
+          >
+              <Text style={styles.dummySimulateText}>Simulate Scan</Text>
+          </Pressable>
+        </View>
+
       </View>
     </Animated.View>
   );
 };
 
-// --- REDESIGNED: THE APPLE-WALLET STYLE MEMBER PAGE ---
+// --- REDESIGNED: THE APPLE-WALLET STYLE MEMBER PAGE (REACTIVE) ---
 const MemberDetailPage = ({ visible, onClose }: { visible: boolean, onClose: () => void }) => {
   const insets = useSafeAreaInsets();
   const slideAnim = useRef(new Animated.Value(width)).current; 
+
+  // AMBIL DATA DARI ZUSTAND
+  const activeMember = useCashierStore((state) => state.activeMember);
+  const processTransaction = useCashierStore((state) => state.processTransaction);
 
   useEffect(() => {
     if (visible) {
@@ -155,6 +201,15 @@ const MemberDetailPage = ({ visible, onClose }: { visible: boolean, onClose: () 
       Animated.spring(slideAnim, { toValue: width, friction: 9, tension: 60, useNativeDriver: true }).start();
     }
   }, [visible]);
+
+  // FUNGSI SIMULASI CHECKOUT
+  const handleCharge = () => {
+    processTransaction(45000, true); // Tambah Rp 45rb & Tambah 1 Member Visit
+    onClose();
+  };
+
+  // Jangan render jika tidak ada data member
+  if (!activeMember) return null;
 
   return (
     <Animated.View 
@@ -179,24 +234,24 @@ const MemberDetailPage = ({ visible, onClose }: { visible: boolean, onClose: () 
             </View>
             <View style={styles.cardTierBadge}>
                <Crown size={12} color={DESIGN.surfaceDark} strokeWidth={3} style={{marginRight: 4}} />
-               <Text style={styles.cardTierText}>GOLD</Text>
+               <Text style={styles.cardTierText}>{activeMember.tier}</Text>
             </View>
           </View>
           <View style={styles.digitalCardBody}>
-            <Text style={styles.cardMemberName}>Ferry Rusly</Text>
-            <Text style={styles.cardMemberID}>ID: 0812 • 3456 • 7890</Text>
+            <Text style={styles.cardMemberName}>{activeMember.name}</Text>
+            <Text style={styles.cardMemberID}>UID: {activeMember.uid}</Text>
           </View>
         </View>
         <View style={styles.statsRow}>
            <View style={styles.statBox}>
               <View style={styles.statIconGold}><Star size={20} color={DESIGN.gold} /></View>
               <Text style={styles.statLabel}>Total Points</Text>
-              <Text style={styles.statValue}>1,450</Text>
+              <Text style={styles.statValue}>{formatRupiah(activeMember.points)}</Text>
            </View>
            <View style={styles.statBox}>
               <View style={styles.statIconDark}><CreditCard size={20} color={DESIGN.surface} /></View>
               <Text style={styles.statLabel}>E-Wallet</Text>
-              <Text style={styles.statValue}>Rp 120k</Text>
+              <Text style={styles.statValue}>Rp {formatRupiah(activeMember.walletBalance)}</Text>
            </View>
         </View>
         <Text style={styles.sectionHeading}>Available Rewards</Text>
@@ -214,9 +269,9 @@ const MemberDetailPage = ({ visible, onClose }: { visible: boolean, onClose: () 
         </View>
       </ScrollView>
       <View style={[styles.stickyBottomBar, { paddingBottom: insets.bottom || 24 }]}>
-         <Pressable style={({ pressed }) => [styles.primaryActionBtn, pressed && { transform: [{ scale: 0.96 }] }]}>
+         <Pressable style={({ pressed }) => [styles.primaryActionBtn, pressed && { transform: [{ scale: 0.96 }] }]} onPress={handleCharge}>
             <ShoppingBag size={20} color={DESIGN.surface} style={{marginRight: 8}} />
-            <Text style={styles.primaryActionText}>New Transaction</Text>
+            <Text style={styles.primaryActionText}>Charge Rp 45.000</Text>
          </Pressable>
       </View>
     </Animated.View>
@@ -236,6 +291,53 @@ export default function CashierDashboard() {
   
   const [isScannerVisible, setIsScannerVisible] = useState(false);
   const [isMemberPageVisible, setIsMemberPageVisible] = useState(false);
+
+  // --- ZUSTAND STORE INTEGRATION ---
+  const { totalRevenue, memberVisits, storeName, setActiveMember, syncData, setCashierProfile } = useCashierStore();
+
+  // --- FIREBASE INITIALIZATION LOGIC ---
+  useEffect(() => {
+    const initializeCashierData = async () => {
+      try {
+        // NANTI KETIKA FIREBASE SUDAH DI-SETUP, GANTI DENGAN KODE INI:
+        /*
+        import { doc, getDoc } from 'firebase/firestore';
+        import { auth, db } from '../lib/firebase'; // Sesuaikan path
+
+        const currentUser = auth.currentUser;
+        if (!currentUser) return;
+
+        // 1. Ambil data User Kasir untuk tau dia di-assign ke store mana
+        const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+        if (userDoc.exists()) {
+           const userData = userDoc.data();
+           const assignedStoreId = userData.storeId;
+
+           // 2. Ambil detail Nama Toko dari koleksi 'stores'
+           const storeDoc = await getDoc(doc(db, 'stores', assignedStoreId));
+           if (storeDoc.exists()) {
+              const storeData = storeDoc.data();
+              
+              // 3. Masukkan ke Otak Zustand
+              setCashierProfile(userData.name, assignedStoreId, storeData.name);
+           }
+        }
+        */
+
+        // --- SIMULASI SEMENTARA SEBELUM AUTH JALAN ---
+        // Kita simulasikan efek fetching 1 detik, lalu update header
+        setTimeout(() => {
+          // Misalnya kasir ini di-assign ke Pakuwon Mall di Firebase
+          setCashierProfile('Ferry Rusly', 'STR-002', 'Pakuwon Mall');
+        }, 1000);
+
+      } catch (error) {
+        console.error("Error fetching store data:", error);
+      }
+    };
+
+    initializeCashierData();
+  }, []);
   
   const SHEET_HIDDEN = height; 
   const SHEET_HALF = height * 0.4; 
@@ -339,21 +441,32 @@ export default function CashierDashboard() {
   const morphPaddingTop = modalY.interpolate({ inputRange: [SHEET_FULL, SHEET_HALF], outputRange: [insets.top + 10, 10], extrapolate: 'clamp' });
   const morphChartHeight = modalY.interpolate({ inputRange: [SHEET_FULL, SHEET_HALF], outputRange: [240, 160], extrapolate: 'clamp' });
 
-  const handleSimulateScan = () => {
+  // --- ZUSTAND: HANDLER SCAN CAMERA ---
+  const handleSimulateScan = (data: string) => {
     setIsScannerVisible(false); 
+    
+    // Inject data ke Zustand dari hasil QR
+    setActiveMember({
+      uid: data,
+      name: 'Budi Santoso',
+      phone: '08123456789',
+      points: 1250,
+      tier: 'GOLD',
+      walletBalance: 250000
+    });
+
     setIsMemberPageVisible(true); 
   };
 
-  // --- HANDLER SYNC DATABASE (SPIN ANIMATION) ---
-  const handleSyncDatabase = () => {
-    // Reset spin
+  // --- ZUSTAND: HANDLER SYNC DATABASE (SPIN ANIMATION) ---
+  const handleSyncDatabase = async () => {
     spinAnim.setValue(0);
-    // Putar ikon selama 1.5 detik
-    Animated.timing(spinAnim, {
-      toValue: 1,
-      duration: 1500,
-      useNativeDriver: true,
-    }).start();
+    Animated.loop(Animated.timing(spinAnim, { toValue: 1, duration: 1000, useNativeDriver: true })).start();
+    
+    // Panggil fungsi Zustand async
+    await syncData();
+    
+    Animated.timing(spinAnim, { toValue: 0, duration: 300, useNativeDriver: true }).stop();
   };
 
   const spin = spinAnim.interpolate({
@@ -543,12 +656,20 @@ export default function CashierDashboard() {
                 </View>
                 <View style={styles.heroBottom}>
                   <Text style={styles.heroLabel}>Total Revenue Today</Text>
-                  <Text style={styles.heroValue}><Text style={styles.currency}>Rp</Text> 4.250<Text style={styles.decimals}>.000</Text></Text>
+                  {/* --- NILAI REVENUE DARI ZUSTAND --- */}
+                  <Text style={styles.heroValue}><Text style={styles.currency}>Rp</Text> {formatRupiah(totalRevenue)}</Text>
                 </View>
               </SquishyBento>
 
               <View style={styles.bentoRow}>
-                <SquishyBento onPress={() => openModal('MEMBERS')} style={[styles.bentoBox, styles.bentoBoxSmall]}><View style={styles.iconWrapperDark}><Users size={22} color={DESIGN.surface} /></View><View><Text style={styles.bentoValue}>128</Text><Text style={styles.bentoLabel}>Member Visits</Text></View></SquishyBento>
+                <SquishyBento onPress={() => openModal('MEMBERS')} style={[styles.bentoBox, styles.bentoBoxSmall]}>
+                   <View style={styles.iconWrapperDark}><Users size={22} color={DESIGN.surface} /></View>
+                   <View>
+                      {/* --- NILAI VISITS DARI ZUSTAND --- */}
+                      <Text style={styles.bentoValue}>{memberVisits}</Text>
+                      <Text style={styles.bentoLabel}>Member Visits</Text>
+                   </View>
+                </SquishyBento>
                 <SquishyBento onPress={() => openModal('TIERS')} style={[styles.bentoBox, styles.bentoBoxSmall]}><View style={styles.iconWrapperGold}><Crown size={22} color={DESIGN.gold} /></View><View><Text style={styles.bentoValue}>Gold</Text><Text style={styles.bentoLabel}>Top Tier Today</Text></View></SquishyBento>
               </View>
 
@@ -618,17 +739,16 @@ export default function CashierDashboard() {
           </View>
         )}
 
-        {/* --- HALAMAN PROFILE (MINIMALIS) --- */}
+        {/* --- HALAMAN PROFILE --- */}
         {item === 'PROFILE' && (
              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.profileContainer}>
-                
-                {/* Hero Section */}
                 <View style={styles.profileHero}>
                    <View style={styles.profileAvatarBox}>
                       <Store size={40} color={DESIGN.textPrimary} />
                    </View>
-                   <Text style={styles.profileStoreName}>Gong Cha</Text>
-                   <Text style={styles.profileStoreLocation}>Tunjungan Plaza 3</Text>
+                   {/* --- NAMA TOKO DARI ZUSTAND --- */}
+                   <Text style={styles.profileStoreName}>{storeName}</Text>
+                   <Text style={styles.profileStoreLocation}>{storeName}</Text>
                    
                    <View style={styles.profileStatusBadge}>
                       <View style={styles.statusDot} />
@@ -638,14 +758,8 @@ export default function CashierDashboard() {
 
                 <Text style={styles.sectionHeading}>System Actions</Text>
                 
-                {/* Action Buttons */}
                 <View style={styles.profileActionGroup}>
-                   
-                   {/* Sync Button */}
-                   <Pressable 
-                     style={({pressed}) => [styles.profileActionRow, pressed && {backgroundColor: DESIGN.canvas}]}
-                     onPress={handleSyncDatabase}
-                   >
+                   <Pressable style={({pressed}) => [styles.profileActionRow, pressed && {backgroundColor: DESIGN.canvas}]} onPress={handleSyncDatabase}>
                       <View style={styles.profileActionLeft}>
                          <View style={styles.actionIconBox}>
                             <Animated.View style={{ transform: [{ rotate: spin }] }}>
@@ -659,11 +773,7 @@ export default function CashierDashboard() {
 
                    <View style={styles.actionDivider} />
 
-                   {/* Logout Button */}
-                   <Pressable 
-                     style={({pressed}) => [styles.profileActionRow, pressed && {backgroundColor: DESIGN.canvas}]}
-                     onPress={() => console.log('Logout pressed')}
-                   >
+                   <Pressable style={({pressed}) => [styles.profileActionRow, pressed && {backgroundColor: DESIGN.canvas}]} onPress={() => console.log('Logout pressed')}>
                       <View style={styles.profileActionLeft}>
                          <View style={[styles.actionIconBox, {backgroundColor: 'rgba(211, 35, 42, 0.1)'}]}>
                             <LogOut size={20} color={DESIGN.brandRed} />
@@ -671,7 +781,6 @@ export default function CashierDashboard() {
                          <Text style={[styles.actionText, {color: DESIGN.brandRed}]}>Logout Terminal</Text>
                       </View>
                    </Pressable>
-
                 </View>
 
                 <Text style={styles.appVersionText}>App Version 1.0.4 (Build 82)</Text>
@@ -689,7 +798,8 @@ export default function CashierDashboard() {
         <View style={styles.header}>
           <View>
             <Text style={styles.eyebrow}>{getGreeting()}</Text>
-            <Text style={styles.locationTitle}>Tunjungan Plaza.</Text>
+            {/* --- NAMA TOKO DARI ZUSTAND --- */}
+            <Text style={styles.locationTitle}>{storeName}.</Text>
           </View>
           <View style={styles.avatarPremium}>
             <Image source={require('../../assets/images/logo1.webp')} style={styles.logoImage} resizeMode="contain" />
@@ -734,7 +844,7 @@ export default function CashierDashboard() {
         </View>
       </Modal>
 
-      <ScannerOverlay visible={isScannerVisible} onClose={() => setIsScannerVisible(false)} onSimulateSuccess={handleSimulateScan} />
+      <ScannerOverlay visible={isScannerVisible} onClose={() => setIsScannerVisible(false)} onSuccessScan={handleSimulateScan} />
       <MemberDetailPage visible={isMemberPageVisible} onClose={() => setIsMemberPageVisible(false)} />
     </View>
   );
@@ -742,14 +852,51 @@ export default function CashierDashboard() {
 
 // --- WORLD-CLASS STYLESHEET ---
 const styles = StyleSheet.create({
+    scannerContainer: { ...StyleSheet.absoluteFillObject, zIndex: 999, backgroundColor: '#000' },
+    cameraLayer: { ...StyleSheet.absoluteFillObject, zIndex: 1 },
+    noCameraBox: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#111' },
+    darkHoleOverlay: {
+      position: 'absolute',
+      top: height / 2 - 130 - 1000,   
+      left: width / 2 - 130 - 1000,   
+      width: 260 + 2000,              
+      height: 260 + 2000,
+      borderWidth: 1000,
+      borderRadius: 1048,             
+      borderColor: 'rgba(0,0,0,0.85)',
+      zIndex: 2,
+    },
+    viewfinderCenterFrame: { 
+       position: 'absolute', 
+       top: height / 2 - 130, 
+       left: width / 2 - 130,
+       width: 260, 
+       height: 260, 
+       justifyContent: 'center', 
+       alignItems: 'center',
+       zIndex: 3
+    },
+    viewfinderHole: { width: 260, height: 260, borderRadius: 48, borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)' },
+    scannerUIContainer: { ...StyleSheet.absoluteFillObject, zIndex: 4, justifyContent: 'space-between' },
+    scannerHeaderGrid: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, height: 44 },
+    scannerHeaderLeft: { flex: 1, alignItems: 'flex-start' },
+    scannerHeaderCenter: { flex: 2, alignItems: 'center' },
+    scannerHeaderRight: { flex: 1 }, 
+    scannerBadgePill: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 100 },
+    scannerBadgeText: { color: DESIGN.surface, fontSize: 13, fontWeight: '700', letterSpacing: 0.5 },
+    scannerCloseBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
+    scannerFooter: { paddingHorizontal: 24, alignItems: 'center' },
+    scannerInstruction: { color: DESIGN.surface, fontSize: 15, fontWeight: '600', marginBottom: 40, textAlign: 'center', opacity: 0.8 },
+    dummySimulateBtn: { backgroundColor: DESIGN.surface, paddingVertical: 18, paddingHorizontal: 40, borderRadius: 100, shadowColor: '#000', shadowOffset: {width: 0, height: 10}, shadowOpacity: 0.3, shadowRadius: 20 },
+    dummySimulateText: { color: DESIGN.textPrimary, fontSize: 16, fontWeight: '900', letterSpacing: 0.5 },
+  logoImage: { width: 28, height: 28 },
+  onlineDot: { position: 'absolute', bottom: 0, right: 0, width: 14, height: 14, borderRadius: 7, backgroundColor: '#34C759', borderWidth: 2, borderColor: DESIGN.surface },
   root: { flex: 1, backgroundColor: DESIGN.canvas },
   safeArea: { flex: 1 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', paddingHorizontal: 24, paddingTop: 16, paddingBottom: 24 },
   eyebrow: { fontSize: 13, fontWeight: '700', color: DESIGN.textSecondary, letterSpacing: 0.5, marginBottom: 4, textTransform: 'uppercase' },
   locationTitle: { fontSize: 32, fontWeight: '900', color: DESIGN.textPrimary, letterSpacing: -1.2, lineHeight: 36 },
   avatarPremium: { width: 48, height: 48, borderRadius: 24, backgroundColor: DESIGN.surface, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 3 },
-  logoImage: { width: 28, height: 28 },
-  onlineDot: { position: 'absolute', bottom: 0, right: 0, width: 14, height: 14, borderRadius: 7, backgroundColor: '#34C759', borderWidth: 2, borderColor: DESIGN.surface },
   
   tabTrackWrapper: { paddingHorizontal: SCREEN_PADDING, marginBottom: 24 },
   tabTrack: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.04)', padding: TAB_TRACK_PADDING, borderRadius: 100, position: 'relative' },
@@ -824,7 +971,7 @@ const styles = StyleSheet.create({
   profileActionLeft: { flexDirection: 'row', alignItems: 'center' },
   actionIconBox: { width: 40, height: 40, borderRadius: 20, backgroundColor: DESIGN.canvas, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
   actionText: { fontSize: 16, fontWeight: '700', color: DESIGN.textPrimary },
-  actionDivider: { width: '100%', height: 1, backgroundColor: DESIGN.canvas, marginLeft: 72 }, // Sejajar dengan teks
+  actionDivider: { width: '100%', height: 1, backgroundColor: DESIGN.canvas, marginLeft: 72 }, 
   appVersionText: { textAlign: 'center', marginTop: 32, fontSize: 13, fontWeight: '500', color: 'rgba(0,0,0,0.3)' },
 
   // --- MODAL STYLES ---
@@ -908,23 +1055,6 @@ const styles = StyleSheet.create({
   receiptPaymentInfo: { alignItems: 'center', paddingVertical: 12, backgroundColor: 'rgba(0,0,0,0.03)', borderRadius: 12 },
   receiptPaymentText: { fontSize: 14, fontWeight: '700', color: DESIGN.textSecondary, marginLeft: 8 },
 
-  // --- MODERN SCANNER STYLES (PIXEL PERFECT) ---
-  scannerContainer: { ...StyleSheet.absoluteFillObject, zIndex: 999, justifyContent: 'space-between' },
-  scannerBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: '#000' }, 
-  scannerHeaderContainer: { paddingTop: Platform.OS === 'android' ? 40 : 10, zIndex: 2 },
-  scannerHeaderGrid: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, height: 44 },
-  scannerHeaderLeft: { flex: 1, alignItems: 'flex-start' },
-  scannerHeaderCenter: { flex: 2, alignItems: 'center' },
-  scannerHeaderRight: { flex: 1 }, 
-  scannerBadgePill: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.12)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 100 },
-  scannerBadgeText: { color: DESIGN.surface, fontSize: 13, fontWeight: '700', letterSpacing: 0.5 },
-  scannerCloseBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.12)', justifyContent: 'center', alignItems: 'center' },
-  viewfinderWrapper: { alignSelf: 'center', width: 260, height: 260, justifyContent: 'center', alignItems: 'center' },
-  viewfinderHole: { width: 260, height: 260, backgroundColor: 'transparent', borderRadius: 48, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.2)' },
-  scannerFooter: { paddingHorizontal: 24, alignItems: 'center', zIndex: 2 },
-  scannerInstruction: { color: DESIGN.surface, fontSize: 15, fontWeight: '600', marginBottom: 40, textAlign: 'center', opacity: 0.6 },
-  dummySimulateBtn: { backgroundColor: DESIGN.surface, paddingVertical: 18, paddingHorizontal: 40, borderRadius: 100, shadowColor: '#FFF', shadowOffset: {width: 0, height: 10}, shadowOpacity: 0.2, shadowRadius: 20 },
-  dummySimulateText: { color: DESIGN.textPrimary, fontSize: 16, fontWeight: '900', letterSpacing: 0.5 },
 
   // --- NEW: THE APPLE WALLET MEMBER PAGE ---
   pageContainer: { ...StyleSheet.absoluteFillObject, zIndex: 1000 },
