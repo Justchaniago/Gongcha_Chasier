@@ -1,224 +1,216 @@
 // src/screens/LoginScreen.tsx
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TouchableWithoutFeedback,
-  Image,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
-  Keyboard,
-  ScrollView,
-  useWindowDimensions,
-  Alert,
-  ActivityIndicator
+  View, Text, StyleSheet, TouchableOpacity, TouchableWithoutFeedback, 
+  ImageBackground, Image, TextInput, KeyboardAvoidingView, 
+  Platform, Keyboard, ScrollView, Alert, ActivityIndicator, Dimensions
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Eye, EyeOff } from 'lucide-react-native'; 
+import { Eye, EyeOff, Mail, Lock, CheckCircle2, AlertCircle } from 'lucide-react-native'; 
+import { BlurView } from 'expo-blur'; // 🔥 THE GLASSMORPHISM MAGIC
 
-// 🔥 GANTI: Import Auth Zustand
+// Import Auth Zustand
 import { useCashierStore } from '../store/useCashierStore';
 
-// 🎨 Definisi Warna Statis (Light Mode Only)
+const { width, height } = Dimensions.get('window');
+
+// 🎨 Definisi Warna dari Web Panel
 const COLORS = {
-  background: '#FEFDFB',       // Putih Tulang
-  modal: '#FFFFFF',            // Putih Bersih
-  primary: '#B91C2F',          // Merah Gong Cha
-  textPrimary: '#1F2937',      // Abu Gelap (Hampir Hitam)
-  textSecondary: '#6B7280',    // Abu Sedang
-  textDisabled: '#9CA3AF',     // Abu Terang
-  border: '#E5E7EB',           // Garis Halus
-  inputBg: '#F9FAFB',          // Abu Sangat Muda
+  primary: '#4361EE',          // Biru Utama (Dari Web Panel)
+  primaryLight: 'rgba(67, 97, 238, 0.1)',
+  success: '#12B76A',          // Hijau Sukses
+  error: '#C8102E',            // Merah Error
+  errorLight: 'rgba(200, 16, 46, 0.1)',
+  textPrimary: '#0F1117',      // Hitam Teks
+  textSecondary: '#4A5065',    // Abu-abu Gelap
+  textDisabled: '#9299B0',     // Abu-abu Terang (Placeholder)
+  border: 'rgba(255,255,255,0.7)', // Border Kaca
+  inputBgIdle: 'rgba(255, 255, 255, 0.5)', 
+  inputBgFocus: '#FFFFFF',
   white: '#FFFFFF'
 };
 
 export default function LoginScreen() {
-  // 🔥 GANTI: Ambil fungsi login dari Zustand
   const login = useCashierStore((state) => state.login);
   
-  const { width, height } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
-
-  // Responsive Layout Variables
-  const isCompact = width < 360;
-  const logoSize = isCompact ? 88 : 100;
-  const sheetPadding = isCompact ? 18 : 24;
-  const dynamicLogoTop = insets.top + (Platform.OS === 'ios' ? 12 : 8);
-  const dynamicSheetBottomPadding = Math.max(insets.bottom + 16, 24);
-
-  // State
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [localLoading, setLocalLoading] = useState(false);
+  
+  // State untuk fokus input (mengubah warna border & background seperti di web)
+  const [focusE, setFocusE] = useState(false);
+  const [focusP, setFocusP] = useState(false);
 
-  // Handle Login
+  // State untuk sukses login (animasi centang)
+  const [success, setSuccess] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+
   const handleLogin = async () => {
+    setErrorMsg("");
     if (!email.trim() || !password.trim()) {
-      return Alert.alert('Gagal', 'Mohon isi Email dan Password');
+      return setErrorMsg('Email dan password wajib diisi.');
     }
 
     setLocalLoading(true);
     Keyboard.dismiss();
 
     try {
-      await login(email, password);
+      await login(email.trim(), password);
+      // Jika berhasil, munculkan state sukses sejenak sebelum Zustand memindahkan halaman
+      setSuccess(true);
     } catch (e: any) {
       let msg = e.message;
-      if (e.code === 'auth/invalid-credential' || e.code === 'auth/user-not-found') {
+      if (e.code === 'auth/invalid-credential' || e.code === 'auth/user-not-found' || e.code === 'auth/wrong-password') {
         msg = 'Email atau password salah.';
       } else if (e.code === 'auth/invalid-email') {
         msg = 'Format email tidak valid.';
       }
-      Alert.alert('Login Gagal', msg);
-    } finally {
+      setErrorMsg(msg);
       setLocalLoading(false);
     }
   };
 
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-      <View style={[styles.container, { backgroundColor: COLORS.background }]}>
+      <View style={styles.container}>
         <StatusBar style="light" /> 
         
-        {/* Background Image */}
-        <Image 
+        {/* 1. BACKGROUND GAMBAR FULL SCREEN */}
+        <ImageBackground 
+          // Sesuaikan nama file gambar dengan yang ada di asetmu
           source={require('../../assets/images/welcome1.webp')} 
-          style={[styles.backgroundImage, { width, height }]} 
-          resizeMode="cover" 
-        />
-        {/* Gradient Overlay (Supaya teks logo terbaca) */}
-        <LinearGradient 
-          colors={['transparent', 'rgba(0,0,0,0.85)']} 
-          style={[styles.gradientOverlay, { height: height * 0.6 }]} 
-          pointerEvents="none" 
-        />
-        
-        {/* Logo Section */}
-        <View style={[styles.logoSection, { top: dynamicLogoTop }]}>
-          <Image 
-            source={require('../../assets/images/logo1.webp')} 
-            style={{ width: logoSize, height: logoSize }} 
-            resizeMode="contain" 
-          />
-        </View>
-
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.keyboardView}
+          style={styles.backgroundImage}
+          resizeMode="cover"
         >
-          {/* White Bottom Sheet */}
-          <View style={[
-            styles.bottomSheet, 
-            { 
-              padding: sheetPadding, 
-              paddingTop: 12, 
-              paddingBottom: dynamicSheetBottomPadding, 
-              backgroundColor: COLORS.modal 
-            }
-          ]}> 
+          {/* OVERLAY GELAP TIPIS (Agar background tidak mencolok) */}
+          <View style={styles.darkOverlay} />
+
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboardView}>
             
-            {/* Drag Indicator (Garis kecil di atas sheet) */}
-            <View style={styles.sheetHeader}>
-              <View style={[styles.dragIndicator, { backgroundColor: COLORS.border }]} />
-            </View>
+            <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                
+                {/* 2. KARTU LOGIN KACA (GLASSMORPHISM) */}
+                <BlurView intensity={40} tint="light" style={styles.glassCard}>
+                  
+                  {/* HEADER & LOGO */}
+                  <View style={styles.headerSection}>
+                    <View style={styles.logoWrapper}>
+                      <Image source={require('../../assets/images/logo1.webp')} style={styles.logoImage} resizeMode="cover" />
+                    </View>
+                    <Text style={styles.titleText}>
+                      {success ? "Berhasil masuk!" : "Selamat Datang"}
+                    </Text>
+                    <Text style={styles.subtitleText}>
+                      {success ? "Mengalihkan ke dashboard…" : "Masuk ke Aplikasi Gongcha App Cashier"}
+                    </Text>
+                  </View>
 
-            <ScrollView
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.sheetScrollContent}
-            >
-              
-              {/* Header Teks */}
-              <View style={{ marginBottom: 20 }}>
-                <Text style={[styles.header, { color: COLORS.textPrimary }]}>
-                  Staff Login
-                </Text>
-                <Text style={[styles.subtext, { color: COLORS.textSecondary }]}>
-                  Masuk menggunakan akun kasir
-                </Text>
-              </View>
+                  {/* FORM LOGIN ATAU STATE SUKSES */}
+                  {!success ? (
+                    <View style={styles.formContainer}>
+                      
+                      {/* INPUT EMAIL */}
+                      <View style={styles.inputGroup}>
+                        <Text style={styles.label}>Email</Text>
+                        <View style={[
+                          styles.inputWrapper,
+                          { 
+                            backgroundColor: focusE ? COLORS.inputBgFocus : COLORS.inputBgIdle,
+                            borderColor: focusE ? COLORS.primary : COLORS.border,
+                            borderWidth: focusE ? 1.5 : 1
+                          }
+                        ]}>
+                          <Mail size={18} color={focusE ? COLORS.primary : COLORS.textDisabled} style={styles.inputIcon} />
+                          <TextInput 
+                            style={styles.textInput}
+                            placeholder="kasir@gongcha.id"
+                            placeholderTextColor={COLORS.textDisabled}
+                            value={email}
+                            onChangeText={setEmail}
+                            autoCapitalize="none"
+                            keyboardType="email-address"
+                            onFocus={() => setFocusE(true)}
+                            onBlur={() => setFocusE(false)}
+                          />
+                        </View>
+                      </View>
 
-              {/* --- INPUT EMAIL --- */}
-              <View style={styles.inputGroup}>
-                <Text style={[styles.label, { color: COLORS.textSecondary }]}>Email</Text>
-                <TextInput
-                  style={[styles.input, { 
-                    backgroundColor: COLORS.inputBg, 
-                    borderColor: COLORS.border,
-                    color: COLORS.textPrimary
-                  }]}
-                  placeholder="kasir@gongcha.id"
-                  placeholderTextColor={COLORS.textDisabled}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  value={email}
-                  onChangeText={setEmail}
-                />
-              </View>
+                      {/* INPUT PASSWORD */}
+                      <View style={styles.inputGroup}>
+                        <Text style={styles.label}>Password</Text>
+                        <View style={[
+                          styles.inputWrapper,
+                          { 
+                            backgroundColor: focusP ? COLORS.inputBgFocus : COLORS.inputBgIdle,
+                            borderColor: focusP ? COLORS.primary : COLORS.border,
+                            borderWidth: focusP ? 1.5 : 1
+                          }
+                        ]}>
+                          <Lock size={18} color={focusP ? COLORS.primary : COLORS.textDisabled} style={styles.inputIcon} />
+                          <TextInput 
+                            style={styles.textInput}
+                            placeholder="••••••••"
+                            placeholderTextColor={COLORS.textDisabled}
+                            secureTextEntry={!showPassword}
+                            value={password}
+                            onChangeText={setPassword}
+                            onFocus={() => setFocusP(true)}
+                            onBlur={() => setFocusP(false)}
+                          />
+                          <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
+                            {showPassword ? <EyeOff size={18} color={COLORS.textDisabled} /> : <Eye size={18} color={COLORS.textDisabled} />}
+                          </TouchableOpacity>
+                        </View>
+                      </View>
 
-              {/* --- INPUT PASSWORD --- */}
-              <View style={styles.inputGroup}>
-                <Text style={[styles.label, { color: COLORS.textSecondary }]}>Password</Text>
-                <View style={[styles.passwordContainer, { 
-                  backgroundColor: COLORS.inputBg, 
-                  borderColor: COLORS.border 
-                }]}> 
-                  <TextInput
-                    style={[styles.passwordInput, { color: COLORS.textPrimary }]}
-                    placeholder="••••••"
-                    placeholderTextColor={COLORS.textDisabled}
-                    secureTextEntry={!showPassword}
-                    value={password}
-                    onChangeText={setPassword}
-                  />
-                  <TouchableOpacity 
-                    onPress={() => setShowPassword(!showPassword)}
-                    style={{ padding: 10 }}
-                  >
-                    {showPassword ? 
-                      <EyeOff size={20} color={COLORS.textSecondary} /> : 
-                      <Eye size={20} color={COLORS.textSecondary} />
-                    }
-                  </TouchableOpacity>
-                </View>
-              </View>
+                      {/* PESAN ERROR */}
+                      {errorMsg ? (
+                        <View style={styles.errorBox}>
+                          <AlertCircle size={16} color={COLORS.error} style={{marginRight: 8, marginTop: 2}} />
+                          <Text style={styles.errorText}>{errorMsg}</Text>
+                        </View>
+                      ) : null}
 
-              {/* Login Button */}
-              <TouchableOpacity
-                style={[
-                  styles.primaryButton, 
-                  { 
-                    backgroundColor: COLORS.primary,
-                    opacity: localLoading ? 0.7 : 1,
-                    marginTop: 10
-                  }
-                ]}
-                onPress={handleLogin}
-                disabled={localLoading}
-              >
-                {localLoading ? (
-                  <ActivityIndicator color="#FFF" />
-                ) : (
-                  <Text style={[styles.primaryButtonText, { color: COLORS.white }]}>MASUK</Text>
-                )}
-              </TouchableOpacity>
+                      {/* TOMBOL SUBMIT */}
+                      <TouchableOpacity 
+                        style={[styles.submitBtn, { backgroundColor: localLoading ? COLORS.textDisabled : COLORS.primary }]} 
+                        onPress={handleLogin} 
+                        disabled={localLoading}
+                        activeOpacity={0.8}
+                      >
+                        {localLoading ? (
+                          <View style={{flexDirection: 'row', alignItems: 'center'}}>
+                            <ActivityIndicator color={COLORS.white} style={{marginRight: 8}} />
+                            <Text style={styles.submitBtnText}>Masuk...</Text>
+                          </View>
+                        ) : (
+                          <Text style={styles.submitBtnText}>Masuk ke Akun</Text>
+                        )}
+                      </TouchableOpacity>
 
-              {/* Footer Info */}
-              <View style={{marginTop: 24, alignItems: 'center'}}>
-                 <Text style={{color: COLORS.textDisabled, fontSize: 10}}>
-                    Authorized Staff Only • v1.0.0
-                 </Text>
-              </View>
+                    </View>
+                  ) : (
+                    // TAMPILAN SUKSES
+                    <View style={styles.successStateContainer}>
+                      <View style={styles.successCircle}>
+                         <CheckCircle2 size={32} color={COLORS.white} />
+                      </View>
+                      <Text style={styles.successText}>Autentikasi berhasil!</Text>
+                    </View>
+                  )}
+
+                </BlurView>
 
             </ScrollView>
+          </KeyboardAvoidingView>
+
+          {/* 3. FOOTER */}
+          <View style={styles.footerContainer}>
+            <Text style={styles.footerText}>© 2026 Gong Cha Indonesia. All rights reserved.</Text>
           </View>
-        </KeyboardAvoidingView>
+
+        </ImageBackground>
       </View>
     </TouchableWithoutFeedback>
   );
@@ -226,36 +218,56 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 }, 
-  backgroundImage: { position: 'absolute', top: 0, left: 0 },
-  gradientOverlay: { position: 'absolute', bottom: 0, width: '100%' },
-  logoSection: { position: 'absolute', alignSelf: 'center' },
-  keyboardView: { flex: 1, justifyContent: 'flex-end' },
+  backgroundImage: { flex: 1, width: '100%', height: '100%' },
+  darkOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0, 0, 0, 0.15)' },
   
-  bottomSheet: {
-    borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    paddingBottom: 40,
-    shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 20, elevation: 20
-  },
-  sheetHeader: { alignItems: 'center', paddingVertical: 10, marginBottom: 4 },
-  sheetScrollContent: { paddingBottom: 12 },
-  dragIndicator: { width: 40, height: 4, borderRadius: 2 },
+  keyboardView: { flex: 1 },
+  scrollContent: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24 },
   
-  header: { fontSize: 24, fontWeight: 'bold', marginBottom: 4 },
-  subtext: { fontSize: 15 },
+  glassCard: { 
+    width: '100%', 
+    maxWidth: 420, 
+    alignSelf: 'center',
+    borderRadius: 32, 
+    paddingHorizontal: 32, 
+    paddingVertical: 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.65)', 
+    borderWidth: 1, 
+    borderColor: 'rgba(255, 255, 255, 0.8)',
+    overflow: 'hidden' // Penting untuk BlurView
+  },
+
+  headerSection: { alignItems: 'center', marginBottom: 32 },
+  logoWrapper: { padding: 8, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.8)', marginBottom: 20 },
+  logoImage: { width: 48, height: 48, borderRadius: 12 },
+  titleText: { fontSize: 24, fontWeight: '800', color: COLORS.textPrimary, letterSpacing: -0.5, marginBottom: 8 },
+  subtitleText: { fontSize: 13, color: COLORS.textSecondary, fontWeight: '500', textAlign: 'center' },
+
+  formContainer: { gap: 16 },
+  inputGroup: { marginBottom: 12 },
+  label: { fontSize: 12, fontWeight: '700', color: COLORS.textSecondary, marginBottom: 8 },
   
-  inputGroup: { marginBottom: 16 },
-  label: { fontSize: 12, marginBottom: 6, fontWeight: '600', marginLeft: 4 },
-  input: {
-    borderRadius: 14, borderWidth: 1, height: 52, paddingHorizontal: 16, fontSize: 16
+  inputWrapper: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    height: 52, 
+    borderRadius: 14, 
+    paddingHorizontal: 16
   },
-  passwordContainer: {
-    flexDirection: 'row', alignItems: 'center',
-    borderRadius: 14, borderWidth: 1, height: 52, paddingHorizontal: 4
-  },
-  passwordInput: {
-    flex: 1, height: 50, paddingHorizontal: 12, fontSize: 16
-  },
-  
-  primaryButton: { height: 52, borderRadius: 25, justifyContent: 'center', alignItems: 'center' },
-  primaryButtonText: { fontWeight: 'bold', fontSize: 16, letterSpacing: 1 },
+  inputIcon: { marginRight: 12 },
+  textInput: { flex: 1, height: '100%', fontSize: 14, color: COLORS.textPrimary, fontWeight: '500' },
+  eyeBtn: { padding: 4 },
+
+  errorBox: { flexDirection: 'row', alignItems: 'flex-start', padding: 14, backgroundColor: 'rgba(255, 255, 255, 0.8)', borderWidth: 1, borderColor: COLORS.errorLight, borderRadius: 12, marginBottom: 4 },
+  errorText: { flex: 1, fontSize: 13, color: COLORS.error, fontWeight: '600', lineHeight: 18 },
+
+  submitBtn: { height: 52, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginTop: 8 },
+  submitBtnText: { color: COLORS.white, fontSize: 15, fontWeight: '700' },
+
+  successStateContainer: { alignItems: 'center', paddingVertical: 24 },
+  successCircle: { width: 64, height: 64, borderRadius: 32, backgroundColor: COLORS.success, justifyContent: 'center', alignItems: 'center', marginBottom: 16, shadowColor: COLORS.success, shadowOffset: {width: 0, height: 8}, shadowOpacity: 0.3, shadowRadius: 24, elevation: 8 },
+  successText: { fontSize: 15, color: COLORS.textSecondary, fontWeight: '700' },
+
+  footerContainer: { position: 'absolute', bottom: 32, width: '100%', alignItems: 'center' },
+  footerText: { fontSize: 13, color: 'rgba(255, 255, 255, 0.8)', fontWeight: '500' }
 });
