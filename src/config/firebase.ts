@@ -1,11 +1,13 @@
-// Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+import { getFirestore } from "firebase/firestore";
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+// 🔥 FIX FIREBASE v12 ERROR: Bypass TypeScript Linter
+import { initializeAuth } from "firebase/auth";
+// @ts-ignore: getReactNativePersistence exists in the RN bundle but missing from TS definitions
+import { getReactNativePersistence } from "firebase/auth";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Konfigurasi aslimu
 const firebaseConfig = {
   apiKey: "AIzaSyCeSYZdPgERBcf0aKgd0F7wcATkfRt6_iY",
   authDomain: "gongcha-app-4691f.firebaseapp.com",
@@ -16,12 +18,13 @@ const firebaseConfig = {
   measurementId: "G-LVJRJZW2E6"
 };
 
-// Initialize Firebase
+// Initialize Firebase App
 export const firebaseApp = initializeApp(firebaseConfig);
-export const analytics = getAnalytics(firebaseApp);
 
-// Tambahkan Auth dan Firestore
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
-export const firebaseAuth = getAuth(firebaseApp);
+// 🔥 THE MAGIC: Mengawinkan Firebase Auth dengan Storage HP
+export const firebaseAuth = initializeAuth(firebaseApp, {
+  persistence: getReactNativePersistence(AsyncStorage)
+});
+
+// Initialize Firestore
 export const firestoreDb = getFirestore(firebaseApp);
