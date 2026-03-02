@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   View, Text, StyleSheet, Pressable, Platform, SafeAreaView, StatusBar, ScrollView, Dimensions,
-  Image, Animated, NativeSyntheticEvent, NativeScrollEvent, TouchableWithoutFeedback,
+  Image, Animated, Easing, NativeSyntheticEvent, NativeScrollEvent, TouchableWithoutFeedback,
   Modal, SectionList, ActivityIndicator, TextInput, KeyboardAvoidingView 
 } from 'react-native';
 import { QrCode, TrendingUp, Users, Ticket, Crown, X, ChevronRight, Activity, Calendar, Filter, ScanLine, ArrowLeft, Star, ShoppingBag, Banknote, Smartphone, Clock, CheckCircle2, MapPin, Store, RefreshCcw, LogOut, AlertCircle, ChevronLeft } from 'lucide-react-native';
@@ -323,7 +323,14 @@ export default function CashierDashboard() {
      revenue: 0, transactions: 0, memberVisits: 0, 
      membersList: [] as any[], promos: [] as any[], 
      hourlyChart: [] as number[], maxHourValue: 0,
-     tiers: { gold: 0, silver: 0, platinum: 0 }
+     tiers: { gold: 0, silver: 0, platinum: 0 }, topTier: 'Silver' as 'Silver' | 'Gold' | 'Platinum'
+  });
+
+  const [todayStats, setTodayStats] = useState({
+     revenue: 0, transactions: 0, memberVisits: 0, 
+     membersList: [] as any[], promos: [] as any[], 
+     hourlyChart: [] as number[], maxHourValue: 0,
+     tiers: { gold: 0, silver: 0, platinum: 0 }, topTier: 'Silver' as 'Silver' | 'Gold' | 'Platinum'
   });
 
   const [historyLists, setHistoryLists] = useState({ transactions: [] as any[], redemptions: [] as any[] });
@@ -355,67 +362,149 @@ export default function CashierDashboard() {
 
   // 2. COMPUTE DATA BERDASARKAN TANGGAL YANG DIPILIH
   useEffect(() => {
-     let rev = 0; let trxCount = 0; 
-     let membersMap = new Map(); let promosMap = new Map();
-     let allTrx: any[] = []; let allRedeem: any[] = [];
-     let hourlyData = new Array(24).fill(0);
+     const computeStats = async () => {
+        let rev = 0; let trxCount = 0; 
+        let membersMap = new Map(); let promosMap = new Map(); let memberTiersMap = new Map();
+        let allTrx: any[] = []; let allRedeem: any[] = [];
+        let hourlyData = new Array(24).fill(0);
 
-     const startOfDay = new Date(selectedFilterDate); startOfDay.setHours(0, 0, 0, 0);
-     const endOfDay = new Date(selectedFilterDate); endOfDay.setHours(23, 59, 59, 999);
+        const startOfDay = new Date(selectedFilterDate); startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(selectedFilterDate); endOfDay.setHours(23, 59, 59, 999);
 
-     rawTransactions.forEach(data => {
-        if (!data.createdAt?.toDate) return;
-        const trxDate = data.createdAt.toDate();
+        rawTransactions.forEach(data => {
+           if (!data.createdAt?.toDate) return;
+           const trxDate = data.createdAt.toDate();
 
-        if (data.type === 'EARN') {
-           allTrx.push({
-             id: data.id, posTransactionId: data.posTransactionId, type: data.type, cashierName: data.cashierName, storeId: data.storeId,
-             time: trxDate.toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}), dateStr: trxDate.toLocaleDateString('en-US', {day: 'numeric', month: 'short', year: 'numeric'}), timestamp: trxDate.getTime(), createdAt: data.createdAt,
-             totalAmount: data.totalAmount, total: `Rp ${formatRupiah(data.totalAmount || 0)}`, member: data.memberName || null, memberId: data.memberId || null,
-             pointsEarned: data.pointsEarned || 0, pointStatus: data.memberId ? 'RELEASED' : 'NONE', items: 1
-           });
-        } else if (data.type === 'REDEEM') {
-           allRedeem.push({
-             id: data.id, posTransactionId: data.posTransactionId, type: data.type, cashierName: data.cashierName, storeId: data.storeId,
-             time: trxDate.toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}), dateStr: trxDate.toLocaleDateString('en-US', {day: 'numeric', month: 'short', year: 'numeric'}), timestamp: trxDate.getTime(), createdAt: data.createdAt,
-             voucherTitle: data.voucherTitle || 'Voucher', member: data.memberName || 'Pelanggan',
-           });
-        }
-
-        // Kalkulasi Statistik Bento khusus Tanggal Terpilih
-        if (trxDate >= startOfDay && trxDate <= endOfDay) {
            if (data.type === 'EARN') {
-              rev += (data.totalAmount || 0); trxCount += 1;
-              const hour = trxDate.getHours();
-              hourlyData[hour] += (data.totalAmount || 0);
-              if (data.memberId) membersMap.set(data.memberId, { name: data.memberName, time: trxDate });
+              allTrx.push({
+                id: data.id, posTransactionId: data.posTransactionId, type: data.type, cashierName: data.cashierName, storeId: data.storeId,
+                time: trxDate.toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}), dateStr: trxDate.toLocaleDateString('en-US', {day: 'numeric', month: 'short', year: 'numeric'}), timestamp: trxDate.getTime(), createdAt: data.createdAt,
+                totalAmount: data.totalAmount, total: `Rp ${formatRupiah(data.totalAmount || 0)}`, member: data.memberName || null, memberId: data.memberId || null,
+                pointsEarned: data.pointsEarned || 0, pointStatus: data.memberId ? 'RELEASED' : 'NONE', items: 1
+              });
            } else if (data.type === 'REDEEM') {
-              const title = data.voucherTitle || 'Voucher';
-              promosMap.set(title, (promosMap.get(title) || 0) + 1);
+              allRedeem.push({
+                id: data.id, posTransactionId: data.posTransactionId, type: data.type, cashierName: data.cashierName, storeId: data.storeId,
+                time: trxDate.toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}), dateStr: trxDate.toLocaleDateString('en-US', {day: 'numeric', month: 'short', year: 'numeric'}), timestamp: trxDate.getTime(), createdAt: data.createdAt,
+                voucherTitle: data.voucherTitle || 'Voucher', member: data.memberName || 'Pelanggan',
+              });
            }
+
+           // Kalkulasi Statistik Bento khusus Tanggal Terpilih
+           if (trxDate >= startOfDay && trxDate <= endOfDay) {
+              if (data.type === 'EARN') {
+                 rev += (data.totalAmount || 0); trxCount += 1;
+                 const hour = trxDate.getHours();
+                 hourlyData[hour] += (data.totalAmount || 0);
+                 if (data.memberId) membersMap.set(data.memberId, { name: data.memberName, time: trxDate });
+              } else if (data.type === 'REDEEM') {
+                 const title = data.voucherTitle || 'Voucher';
+                 promosMap.set(title, (promosMap.get(title) || 0) + 1);
+              }
+           }
+        });
+
+        allTrx.sort((a,b) => b.timestamp - a.timestamp);
+        allRedeem.sort((a,b) => b.timestamp - a.timestamp);
+
+        const groupData = (list: any[]) => {
+           const map = new Map();
+           list.forEach(item => { if(!map.has(item.dateStr)) map.set(item.dateStr, []); map.get(item.dateStr).push(item); });
+           return Array.from(map.entries()).map(([title, data]) => ({ title, data }));
+        };
+        setHistoryLists({ transactions: groupData(allTrx), redemptions: groupData(allRedeem) });
+
+        // Fetch member tier data for unique memberIds
+        const uniqueMemberIds = Array.from(membersMap.keys());
+        if (uniqueMemberIds.length > 0) {
+           const tierPromises = uniqueMemberIds.map(memberId =>
+              getDoc(doc(firestoreDb, 'users', memberId)).then(snap => ({
+                 memberId,
+                 tier: snap.exists() ? (snap.data()?.tier || 'Silver') : 'Silver'
+              })).catch(() => ({ memberId, tier: 'Silver' }))
+           );
+           const tiers = await Promise.all(tierPromises);
+           tiers.forEach(({ memberId, tier }) => memberTiersMap.set(memberId, tier));
         }
-     });
 
-     allTrx.sort((a,b) => b.timestamp - a.timestamp);
-     allRedeem.sort((a,b) => b.timestamp - a.timestamp);
+        const totalMem = membersMap.size;
+        const goldCount = Array.from(memberTiersMap.values()).filter(t => t === 'Gold').length;
+        const silverCount = Array.from(memberTiersMap.values()).filter(t => t === 'Silver').length;
+        const platinumCount = Array.from(memberTiersMap.values()).filter(t => t === 'Platinum').length;
+        const topTier = platinumCount > goldCount ? (platinumCount > silverCount ? 'Platinum' : 'Silver') : (goldCount > silverCount ? 'Gold' : 'Silver');
 
-     const groupData = (list: any[]) => {
-        const map = new Map();
-        list.forEach(item => { if(!map.has(item.dateStr)) map.set(item.dateStr, []); map.get(item.dateStr).push(item); });
-        return Array.from(map.entries()).map(([title, data]) => ({ title, data }));
+        setDailyStats({
+           revenue: rev, transactions: trxCount, memberVisits: totalMem, 
+           membersList: Array.from(membersMap.values()).sort((a, b) => b.time - a.time), 
+           promos: Array.from(promosMap.entries()).map(([title, count]) => ({ title, count })).sort((a, b) => b.count - a.count),
+           hourlyChart: hourlyData, maxHourValue: Math.max(...hourlyData, 1),
+           tiers: { gold: goldCount, silver: silverCount, platinum: platinumCount },
+           topTier: topTier
+        });
      };
-     setHistoryLists({ transactions: groupData(allTrx), redemptions: groupData(allRedeem) });
 
-     const totalMem = membersMap.size;
-     setDailyStats({
-        revenue: rev, transactions: trxCount, memberVisits: totalMem, 
-        membersList: Array.from(membersMap.values()).sort((a, b) => b.time - a.time), 
-        promos: Array.from(promosMap.entries()).map(([title, count]) => ({ title, count })).sort((a, b) => b.count - a.count),
-        hourlyChart: hourlyData, maxHourValue: Math.max(...hourlyData, 1),
-        tiers: { gold: Math.floor(totalMem * 0.4), silver: Math.floor(totalMem * 0.4), platinum: totalMem - Math.floor(totalMem * 0.8) }
-     });
-
+     computeStats();
   }, [rawTransactions, selectedFilterDate]);
+
+  // 3. COMPUTE TODAY'S STATS (for bento card — always today regardless of selectedFilterDate)
+  useEffect(() => {
+     const computeTodayStats = async () => {
+        let rev = 0; let trxCount = 0; 
+        let membersMap = new Map(); let promosMap = new Map(); let memberTiersMap = new Map();
+        let hourlyData = new Array(24).fill(0);
+
+        const today = new Date();
+        const startOfToday = new Date(today); startOfToday.setHours(0, 0, 0, 0);
+        const endOfToday = new Date(today); endOfToday.setHours(23, 59, 59, 999);
+
+        rawTransactions.forEach(data => {
+           if (!data.createdAt?.toDate) return;
+           const trxDate = data.createdAt.toDate();
+
+           if (trxDate >= startOfToday && trxDate <= endOfToday) {
+              if (data.type === 'EARN') {
+                 rev += (data.totalAmount || 0); trxCount += 1;
+                 const hour = trxDate.getHours();
+                 hourlyData[hour] += (data.totalAmount || 0);
+                 if (data.memberId) membersMap.set(data.memberId, { name: data.memberName, time: trxDate });
+              } else if (data.type === 'REDEEM') {
+                 const title = data.voucherTitle || 'Voucher';
+                 promosMap.set(title, (promosMap.get(title) || 0) + 1);
+              }
+           }
+        });
+
+        // Fetch member tier data for unique memberIds
+        const uniqueMemberIds = Array.from(membersMap.keys());
+        if (uniqueMemberIds.length > 0) {
+           const tierPromises = uniqueMemberIds.map(memberId =>
+              getDoc(doc(firestoreDb, 'users', memberId)).then(snap => ({
+                 memberId,
+                 tier: snap.exists() ? (snap.data()?.tier || 'Silver') : 'Silver'
+              })).catch(() => ({ memberId, tier: 'Silver' }))
+           );
+           const tiers = await Promise.all(tierPromises);
+           tiers.forEach(({ memberId, tier }) => memberTiersMap.set(memberId, tier));
+        }
+
+        const totalMem = membersMap.size;
+        const goldCount = Array.from(memberTiersMap.values()).filter(t => t === 'Gold').length;
+        const silverCount = Array.from(memberTiersMap.values()).filter(t => t === 'Silver').length;
+        const platinumCount = Array.from(memberTiersMap.values()).filter(t => t === 'Platinum').length;
+        const topTier = platinumCount > goldCount ? (platinumCount > silverCount ? 'Platinum' : 'Silver') : (goldCount > silverCount ? 'Gold' : 'Silver');
+
+        setTodayStats({
+           revenue: rev, transactions: trxCount, memberVisits: totalMem, 
+           membersList: Array.from(membersMap.values()).sort((a, b) => b.time - a.time), 
+           promos: Array.from(promosMap.entries()).map(([title, count]) => ({ title, count })).sort((a, b) => b.count - a.count),
+           hourlyChart: hourlyData, maxHourValue: Math.max(...hourlyData, 1),
+           tiers: { gold: goldCount, silver: silverCount, platinum: platinumCount },
+           topTier: topTier
+        });
+     };
+
+     computeTodayStats();
+  }, [rawTransactions]);
 
   const showCustomAlert = (message: string, type: AlertType = 'error') => {
     setAlertConfig({ visible: true, message, type });
@@ -460,7 +549,9 @@ export default function CashierDashboard() {
   };
 
   // --- 🔥 CONTAINER TRANSFORM ANIMATION SYSTEM ---
-  const morphAnim = useRef(new Animated.Value(0)).current;
+  const morphAnim = useRef(new Animated.Value(0)).current;       // layout: left/top/width/height/radius
+  const contentOpacity = useRef(new Animated.Value(0)).current;  // content inside — fades in after expand
+  const backdropAnim = useRef(new Animated.Value(0)).current;    // backdrop blur + card opacity
   const [bentoOrigin, setBentoOrigin] = useState({ x: 0, y: 0, w: width - 48, h: 180 });
 
   // Bento button refs for morph-from-origin
@@ -468,8 +559,6 @@ export default function CashierDashboard() {
   const membersBentoRef = useRef<any>(null);
   const tiersBentoRef = useRef<any>(null);
   const promosBentoRef = useRef<any>(null);
-
-  const backdropOpacity = morphAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
 
   const spinAnim = useRef(new Animated.Value(0)).current; const flatListRef = useRef<Animated.FlatList<any>>(null); const scrollX = useRef(new Animated.Value(0)).current;
 
@@ -480,32 +569,40 @@ export default function CashierDashboard() {
 
   const openModal = (type: ModalType, bentoRef?: React.RefObject<any>) => {
     setShowDatePicker(false);
-    morphAnim.setValue(0);
 
     const doOpen = (ox: number, oy: number, ow: number, oh: number) => {
+      // Pre-reset all values before Modal mounts
+      morphAnim.setValue(0);
+      contentOpacity.setValue(0);
+      backdropAnim.setValue(0);
       setBentoOrigin({ x: ox, y: oy, w: ow, h: oh });
       setActiveModal(type);
-      Animated.spring(morphAnim, {
-        toValue: 1,
-        friction: 8,
-        tension: 55,
-        useNativeDriver: false,
-      }).start();
+
+      // Double rAF: wait 2 paint cycles so the native Modal layer commits
+      // the invisible first frame before we start animating
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          // Run native-driver and JS-driver animations separately — never mix in parallel/sequence
+          Animated.spring(morphAnim, { toValue: 1, friction: 7, tension: 50, useNativeDriver: false }).start();
+          Animated.timing(backdropAnim, { toValue: 1, duration: 280, useNativeDriver: true }).start();
+          // Content fades in after card has mostly expanded
+          setTimeout(() => {
+            Animated.timing(contentOpacity, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+          }, 220);
+        });
+      });
     };
 
     if (bentoRef?.current) {
-      const measure = () => {
-        bentoRef.current.measure((fx: number, fy: number, bw: number, bh: number, px: number, py: number) => {
-          if (bw === 0 && Platform.OS === 'android') {
-            setTimeout(() => bentoRef.current?.measure((_fx: number, _fy: number, _bw: number, _bh: number, _px: number, _py: number) => {
-              doOpen(_px, _py, _bw, _bh);
-            }), 50);
-          } else {
-            doOpen(px, py, bw, bh);
-          }
-        });
-      };
-      measure();
+      bentoRef.current.measure((fx: number, fy: number, bw: number, bh: number, px: number, py: number) => {
+        if (bw === 0 && Platform.OS === 'android') {
+          setTimeout(() => bentoRef.current?.measure((_fx: number, _fy: number, _bw: number, _bh: number, _px: number, _py: number) => {
+            doOpen(_px, _py, _bw, _bh);
+          }), 50);
+        } else {
+          doOpen(px, py, bw, bh);
+        }
+      });
     } else {
       doOpen(24, height / 2 - 90, width - 48, 180);
     }
@@ -513,11 +610,12 @@ export default function CashierDashboard() {
 
   const closeModal = () => {
     setShowDatePicker(false);
-    Animated.timing(morphAnim, {
-      toValue: 0,
-      duration: 300,
-      useNativeDriver: false,
-    }).start(() => setActiveModal(null));
+    // Step 1: fade content out (native driver)
+    Animated.timing(contentOpacity, { toValue: 0, duration: 130, useNativeDriver: true }).start(() => {
+      // Step 2: shrink card (JS driver) + fade backdrop (native driver) — run separately, not in parallel()
+      Animated.timing(morphAnim, { toValue: 0, duration: 300, easing: Easing.out(Easing.cubic), useNativeDriver: false }).start(() => setActiveModal(null));
+      Animated.timing(backdropAnim, { toValue: 0, duration: 260, useNativeDriver: true }).start();
+    });
   };
 
   const handleSyncDatabase = async () => { spinAnim.setValue(0); setSyncStatus('updated'); Animated.loop(Animated.timing(spinAnim, { toValue: 1, duration: 1000, useNativeDriver: true })).start(); try { await syncData(); setSyncStatus('live'); } catch (err) { setSyncStatus('error'); } finally { Animated.timing(spinAnim, { toValue: 0, duration: 300, useNativeDriver: true }).stop(); } };
@@ -687,9 +785,9 @@ export default function CashierDashboard() {
           )}
           {activeModal === 'TIERS' && (
             <View>
-              <View style={styles.tierStatRow}><View style={styles.tierBarContainer}><View style={[styles.tierBar, { width: `${goldP}%`, backgroundColor: DESIGN.gold }]} /></View><Text style={styles.tierStatText}>{goldP}% Gold</Text></View>
-              <View style={styles.tierStatRow}><View style={styles.tierBarContainer}><View style={[styles.tierBar, { width: `${silverP}%`, backgroundColor: DESIGN.textSecondary }]} /></View><Text style={styles.tierStatText}>{silverP}% Silver</Text></View>
-              <View style={styles.tierStatRow}><View style={styles.tierBarContainer}><View style={[styles.tierBar, { width: `${platP}%`, backgroundColor: DESIGN.surfaceDark }]} /></View><Text style={styles.tierStatText}>{platP}% Plat.</Text></View>
+              <View style={styles.tierStatRow}><View style={styles.tierBarContainer}><View style={[styles.tierBar, { width: `${goldP}%`, backgroundColor: DESIGN.gold }]} /></View><Text style={styles.tierStatText}>{dailyStats.tiers.gold} members · {goldP}% Gold</Text></View>
+              <View style={styles.tierStatRow}><View style={styles.tierBarContainer}><View style={[styles.tierBar, { width: `${silverP}%`, backgroundColor: DESIGN.textSecondary }]} /></View><Text style={styles.tierStatText}>{dailyStats.tiers.silver} members · {silverP}% Silver</Text></View>
+              <View style={styles.tierStatRow}><View style={styles.tierBarContainer}><View style={[styles.tierBar, { width: `${platP}%`, backgroundColor: '#A855F7' }]} /></View><Text style={styles.tierStatText}>{dailyStats.tiers.platinum} members · {platP}% Platinum</Text></View>
             </View>
           )}
           {activeModal === 'PROMOS' && (
@@ -717,7 +815,7 @@ export default function CashierDashboard() {
               <View ref={revenueBentoRef} collapsable={false}>
                 <SquishyBento onPress={() => openModal('REVENUE', revenueBentoRef)} style={styles.heroBlackCard}>
                   <View style={styles.heroTop}><View style={styles.badgeGlow}><Text style={styles.badgeText}>LIVE</Text></View><TrendingUp size={24} color={DESIGN.brandRed} /></View>
-                  <View style={styles.heroBottom}><Text style={styles.heroLabel}>Total Revenue</Text><Text style={styles.heroValue}><Text style={styles.currency}>Rp</Text> {formatRupiah(dailyStats.revenue)}</Text></View>
+                  <View style={styles.heroBottom}><Text style={styles.heroLabel}>Total Revenue</Text><Text style={styles.heroValue}><Text style={styles.currency}>Rp</Text> {formatRupiah(todayStats.revenue)}</Text></View>
                 </SquishyBento>
               </View>
 
@@ -726,7 +824,7 @@ export default function CashierDashboard() {
                   <SquishyBento onPress={() => openModal('MEMBERS', membersBentoRef)} style={[styles.bentoBox, styles.bentoBoxSmall]}><View style={styles.iconWrapperDark}><Users size={22} color={DESIGN.surface} /></View><View><Text style={styles.bentoValue}>{dailyStats.memberVisits}</Text><Text style={styles.bentoLabel}>Member Visits</Text></View></SquishyBento>
                 </View>
                 <View ref={tiersBentoRef} style={{ flex: 1 }} collapsable={false}>
-                  <SquishyBento onPress={() => openModal('TIERS', tiersBentoRef)} style={[styles.bentoBox, styles.bentoBoxSmall]}><View style={styles.iconWrapperGold}><Crown size={22} color={DESIGN.gold} /></View><View><Text style={styles.bentoValue}>Gold</Text><Text style={styles.bentoLabel}>Top Tier Today</Text></View></SquishyBento>
+                  <SquishyBento onPress={() => openModal('TIERS', tiersBentoRef)} style={[styles.bentoBox, styles.bentoBoxSmall]}><View style={[styles.iconWrapperGold, { backgroundColor: todayStats.topTier === 'Platinum' ? 'rgba(168, 85, 247, 0.1)' : todayStats.topTier === 'Gold' ? 'rgba(212, 175, 55, 0.1)' : 'rgba(158, 158, 158, 0.1)' }]}><Crown size={22} color={todayStats.topTier === 'Platinum' ? '#A855F7' : todayStats.topTier === 'Gold' ? DESIGN.gold : '#9E9E9E'} /></View><View><Text style={styles.bentoValue}>{todayStats.topTier}</Text><Text style={styles.bentoLabel}>Top Tier Today</Text></View></SquishyBento>
                 </View>
               </View>
 
@@ -869,30 +967,38 @@ export default function CashierDashboard() {
 
       <Modal visible={activeModal !== null} transparent={true} animationType="none" onRequestClose={closeModal}>
         <View style={styles.floatingModalWrapper}>
+          {/* Backdrop blur — opacity driven by backdropAnim */}
           <TouchableWithoutFeedback onPress={closeModal}>
-            <Animated.View style={[StyleSheet.absoluteFill, { opacity: backdropOpacity }]}>
+            <Animated.View style={[StyleSheet.absoluteFill, { opacity: backdropAnim }]}>
               <BlurView intensity={55} tint="dark" style={StyleSheet.absoluteFill} />
             </Animated.View>
           </TouchableWithoutFeedback>
+
+          {/* Outer: JS-driver handles layout (left/top/width/height/radius) */}
           <Animated.View
             pointerEvents="auto"
-            style={[styles.floatingModalCard, {
-              position: 'absolute',
-              left: morphAnim.interpolate({ inputRange: [0, 1], outputRange: [bentoOrigin.x, 0] }),
-              top: morphAnim.interpolate({ inputRange: [0, 1], outputRange: [bentoOrigin.y, 0] }),
-              width: morphAnim.interpolate({ inputRange: [0, 1], outputRange: [bentoOrigin.w, width] }),
-              height: morphAnim.interpolate({ inputRange: [0, 1], outputRange: [bentoOrigin.h, height] }),
-              borderRadius: morphAnim.interpolate({ inputRange: [0, 1], outputRange: [28, 0] }),
-            }]}
+            style={[
+              styles.floatingModalCard,
+              {
+                position: 'absolute',
+                left:         morphAnim.interpolate({ inputRange: [0, 1], outputRange: [bentoOrigin.x, 0] }),
+                top:          morphAnim.interpolate({ inputRange: [0, 1], outputRange: [bentoOrigin.y, 0] }),
+                width:        morphAnim.interpolate({ inputRange: [0, 1], outputRange: [bentoOrigin.w, width] }),
+                height:       morphAnim.interpolate({ inputRange: [0, 1], outputRange: [bentoOrigin.h, height] }),
+                borderRadius: morphAnim.interpolate({ inputRange: [0, 1], outputRange: [28, 0] }),
+              },
+            ]}
           >
-            <Animated.View style={[
-              styles.floatingModalClipView,
-              { borderRadius: morphAnim.interpolate({ inputRange: [0, 1], outputRange: [28, 0] }) }
-            ]}>
-              <Animated.View style={{ opacity: morphAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 0, 1] }), flex: 1, paddingTop: insets.top, paddingBottom: insets.bottom }}>
-                {renderModalContent()}
+            {/* Clip view — borderRadius + overflow handled by parent, this is a plain View */}
+            <View style={styles.floatingModalClipView}>
+              {/* Native-driver: card invisible on first render → no white flash */}
+              <Animated.View style={{ flex: 1, opacity: backdropAnim }}>
+                {/* Native-driver: content fades in after card is mostly expanded */}
+                <Animated.View style={{ opacity: contentOpacity, flex: 1, paddingTop: insets.top, paddingBottom: insets.bottom }}>
+                  {renderModalContent()}
+                </Animated.View>
               </Animated.View>
-            </Animated.View>
+            </View>
           </Animated.View>
         </View>
       </Modal>
