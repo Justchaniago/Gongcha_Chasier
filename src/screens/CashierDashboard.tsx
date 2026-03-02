@@ -845,7 +845,13 @@ export default function CashierDashboard() {
                   <SquishyBento onPress={() => openModal('MEMBERS', membersBentoRef)} style={[styles.bentoBox, styles.bentoBoxSmall]}><View style={styles.iconWrapperDark}><Users size={22} color={DESIGN.surface} /></View><View><Text style={styles.bentoValue}>{dailyStats.memberVisits}</Text><Text style={styles.bentoLabel}>Member Visits</Text></View></SquishyBento>
                 </View>
                 <View ref={tiersBentoRef} style={{ flex: 1 }} collapsable={false}>
-                  <SquishyBento onPress={() => openModal('TIERS', tiersBentoRef)} style={[styles.bentoBox, styles.bentoBoxSmall]}><View style={[styles.iconWrapperGold, { backgroundColor: todayStats.topTier === 'Platinum' ? 'rgba(168, 85, 247, 0.1)' : todayStats.topTier === 'Gold' ? 'rgba(212, 175, 55, 0.1)' : 'rgba(158, 158, 158, 0.1)' }]}><Crown size={22} color={todayStats.topTier === 'Platinum' ? '#A855F7' : todayStats.topTier === 'Gold' ? DESIGN.gold : '#9E9E9E'} /></View><View><Text style={styles.bentoValue}>{todayStats.topTier}</Text><Text style={styles.bentoLabel}>Top Tier Today</Text></View></SquishyBento>
+                  <SquishyBento onPress={() => openModal('TIERS', tiersBentoRef)} style={[styles.bentoBox, styles.bentoBoxSmall]}>
+                    <View style={styles.iconWrapperGold}><Crown size={22} color={DESIGN.gold} /></View>
+                    <View>
+                      <Text style={styles.bentoValue}>{todayStats.tiers.gold > 0 || todayStats.tiers.silver > 0 || todayStats.tiers.platinum > 0 ? `G${todayStats.tiers.gold} S${todayStats.tiers.silver} P${todayStats.tiers.platinum}` : '—'}</Text>
+                      <Text style={styles.bentoLabel}>{todayStats.memberVisits > 0 ? 'Tier Dist' : 'No Visits'}</Text>
+                    </View>
+                  </SquishyBento>
                 </View>
               </View>
 
