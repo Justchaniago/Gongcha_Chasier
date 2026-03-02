@@ -847,9 +847,37 @@ export default function CashierDashboard() {
                 <View ref={tiersBentoRef} style={{ flex: 1 }} collapsable={false}>
                   <SquishyBento onPress={() => openModal('TIERS', tiersBentoRef)} style={[styles.bentoBox, styles.bentoBoxSmall]}>
                     <View style={styles.iconWrapperGold}><Crown size={22} color={DESIGN.gold} /></View>
-                    <View>
-                      <Text style={styles.bentoValue}>{todayStats.tiers.gold > 0 || todayStats.tiers.silver > 0 || todayStats.tiers.platinum > 0 ? `G${todayStats.tiers.gold} S${todayStats.tiers.silver} P${todayStats.tiers.platinum}` : '—'}</Text>
-                      <Text style={styles.bentoLabel}>{todayStats.memberVisits > 0 ? 'Tier Dist' : 'No Visits'}</Text>
+                    <View style={{ flex: 1, justifyContent: 'center', gap: 3 }}>
+                      {(() => {
+                        const total = todayStats.tiers.gold + todayStats.tiers.silver + todayStats.tiers.platinum;
+                        const maxVal = Math.max(todayStats.tiers.gold, todayStats.tiers.silver, todayStats.tiers.platinum, 1);
+                        const goldW = total > 0 ? (todayStats.tiers.gold / maxVal) * 100 : 0;
+                        const silverW = total > 0 ? (todayStats.tiers.silver / maxVal) * 100 : 0;
+                        const platW = total > 0 ? (todayStats.tiers.platinum / maxVal) * 100 : 0;
+                        return (
+                          <>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                              <Text style={{ fontSize: 8, fontWeight: '600', color: DESIGN.textSecondary, width: 10 }}>G</Text>
+                              <View style={{ flex: 1, height: 2, backgroundColor: 'rgba(212, 175, 55, 0.2)', borderRadius: 1 }}>
+                                <View style={{ width: `${goldW}%`, height: '100%', backgroundColor: DESIGN.gold, borderRadius: 1 }} />
+                              </View>
+                            </View>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                              <Text style={{ fontSize: 8, fontWeight: '600', color: DESIGN.textSecondary, width: 10 }}>S</Text>
+                              <View style={{ flex: 1, height: 2, backgroundColor: 'rgba(158, 158, 158, 0.2)', borderRadius: 1 }}>
+                                <View style={{ width: `${silverW}%`, height: '100%', backgroundColor: DESIGN.textSecondary, borderRadius: 1 }} />
+                              </View>
+                            </View>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                              <Text style={{ fontSize: 8, fontWeight: '600', color: DESIGN.textSecondary, width: 10 }}>P</Text>
+                              <View style={{ flex: 1, height: 2, backgroundColor: 'rgba(168, 85, 247, 0.2)', borderRadius: 1 }}>
+                                <View style={{ width: `${platW}%`, height: '100%', backgroundColor: '#A855F7', borderRadius: 1 }} />
+                              </View>
+                            </View>
+                          </>
+                        );
+                      })()}
+                      <Text style={styles.bentoLabel}>Tier Dist</Text>
                     </View>
                   </SquishyBento>
                 </View>
