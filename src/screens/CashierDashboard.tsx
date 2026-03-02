@@ -417,14 +417,24 @@ export default function CashierDashboard() {
         // Fetch member tier data for unique memberIds
         const uniqueMemberIds = Array.from(membersMap.keys());
         if (uniqueMemberIds.length > 0) {
-           const tierPromises = uniqueMemberIds.map(memberId =>
-              getDoc(doc(firestoreDb, 'users', memberId)).then(snap => ({
-                 memberId,
-                 tier: snap.exists() ? (snap.data()?.tier || 'Silver') : 'Silver'
-              })).catch(() => ({ memberId, tier: 'Silver' }))
-           );
-           const tiers = await Promise.all(tierPromises);
-           tiers.forEach(({ memberId, tier }) => memberTiersMap.set(memberId, tier));
+           try {
+              const tierPromises = uniqueMemberIds.map(memberId =>
+                 getDoc(doc(firestoreDb, 'users', memberId)).then(snap => {
+                    if (snap.exists()) {
+                       const tierVal = snap.data()?.tier || 'Silver';
+                       return { memberId, tier: tierVal, found: true };
+                    }
+                    return { memberId, tier: 'Silver', found: false };
+                 }).catch((err) => {
+                    console.warn(`Failed to fetch tier for ${memberId}:`, err);
+                    return { memberId, tier: 'Silver', found: false };
+                 })
+              );
+              const tiers = await Promise.all(tierPromises);
+              tiers.forEach(({ memberId, tier }) => memberTiersMap.set(memberId, tier));
+           } catch (err) {
+              console.error('Error fetching member tiers:', err);
+           }
         }
 
         const totalMem = membersMap.size;
@@ -477,14 +487,24 @@ export default function CashierDashboard() {
         // Fetch member tier data for unique memberIds
         const uniqueMemberIds = Array.from(membersMap.keys());
         if (uniqueMemberIds.length > 0) {
-           const tierPromises = uniqueMemberIds.map(memberId =>
-              getDoc(doc(firestoreDb, 'users', memberId)).then(snap => ({
-                 memberId,
-                 tier: snap.exists() ? (snap.data()?.tier || 'Silver') : 'Silver'
-              })).catch(() => ({ memberId, tier: 'Silver' }))
-           );
-           const tiers = await Promise.all(tierPromises);
-           tiers.forEach(({ memberId, tier }) => memberTiersMap.set(memberId, tier));
+           try {
+              const tierPromises = uniqueMemberIds.map(memberId =>
+                 getDoc(doc(firestoreDb, 'users', memberId)).then(snap => {
+                    if (snap.exists()) {
+                       const tierVal = snap.data()?.tier || 'Silver';
+                       return { memberId, tier: tierVal, found: true };
+                    }
+                    return { memberId, tier: 'Silver', found: false };
+                 }).catch((err) => {
+                    console.warn(`Failed to fetch tier for ${memberId}:`, err);
+                    return { memberId, tier: 'Silver', found: false };
+                 })
+              );
+              const tiers = await Promise.all(tierPromises);
+              tiers.forEach(({ memberId, tier }) => memberTiersMap.set(memberId, tier));
+           } catch (err) {
+              console.error('Error fetching member tiers for today:', err);
+           }
         }
 
         const totalMem = membersMap.size;
