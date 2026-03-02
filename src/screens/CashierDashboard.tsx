@@ -835,14 +835,34 @@ export default function CashierDashboard() {
             <View style={styles.bentoContainer}>
               <View ref={revenueBentoRef} collapsable={false}>
                 <SquishyBento onPress={() => openModal('REVENUE', revenueBentoRef)} style={styles.heroBlackCard}>
-                  <View style={styles.heroTop}><View style={styles.badgeGlow}><Text style={styles.badgeText}>LIVE</Text></View><TrendingUp size={24} color={DESIGN.brandRed} /></View>
-                  <View style={styles.heroBottom}><Text style={styles.heroLabel}>Total Revenue</Text><Text style={styles.heroValue}><Text style={styles.currency}>Rp</Text> {formatRupiah(todayStats.revenue)}</Text></View>
+                  <View style={styles.heroTop}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: DESIGN.brandRed }} />
+                      <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11, fontWeight: '600', letterSpacing: 0.8 }}>TODAY'S REVENUE</Text>
+                    </View>
+                    <TrendingUp size={18} color='rgba(255,255,255,0.25)' strokeWidth={2} />
+                  </View>
+                  <View style={styles.heroBottom}>
+                    <Text style={styles.heroValue}><Text style={styles.currency}>Rp</Text> {formatRupiah(todayStats.revenue)}</Text>
+                    <Text style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, fontWeight: '500', marginTop: 6 }}>{todayStats.transactions} transactions recorded</Text>
+                  </View>
                 </SquishyBento>
               </View>
 
               <View style={styles.bentoRow}>
                 <View ref={membersBentoRef} style={{ flex: 1 }} collapsable={false}>
-                  <SquishyBento onPress={() => openModal('MEMBERS', membersBentoRef)} style={[styles.bentoBox, styles.bentoBoxSmall]}><View style={styles.iconWrapperDark}><Users size={22} color={DESIGN.surface} /></View><View><Text style={styles.bentoValue}>{dailyStats.memberVisits}</Text><Text style={styles.bentoLabel}>Member Visits</Text></View></SquishyBento>
+                  <SquishyBento onPress={() => openModal('MEMBERS', membersBentoRef)} style={[styles.bentoBox, styles.bentoBoxSmall]}>
+                    <View style={{ flex: 1, justifyContent: 'space-between' }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <Text style={styles.bentoLabel}>Member Visits</Text>
+                        <Users size={15} color={DESIGN.textSecondary} strokeWidth={2} />
+                      </View>
+                      <View>
+                        <Text style={styles.bentoValue}>{dailyStats.memberVisits}</Text>
+                        <Text style={{ fontSize: 11, color: DESIGN.textSecondary, fontWeight: '500', marginTop: 2 }}>{dailyStats.memberVisits === 1 ? 'member today' : 'members today'}</Text>
+                      </View>
+                    </View>
+                  </SquishyBento>
                 </View>
                 <View ref={tiersBentoRef} style={{ flex: 1 }} collapsable={false}>
                   <SquishyBento onPress={() => openModal('TIERS', tiersBentoRef)} style={[styles.bentoBox, styles.bentoBoxSmall]}>
@@ -854,43 +874,43 @@ export default function CashierDashboard() {
                       return (
                         <View style={{ flex: 1, justifyContent: 'space-between' }}>
                           {/* Header */}
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                            <Crown size={13} color={DESIGN.gold} strokeWidth={2.5} />
-                            <Text style={{ fontSize: 11, fontWeight: '700', color: DESIGN.textPrimary, letterSpacing: -0.2 }}>Member Tiers</Text>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Text style={styles.bentoLabel}>Member Tiers</Text>
+                            <Crown size={14} color={DESIGN.gold} strokeWidth={2} />
                           </View>
                           {/* Tier rows */}
-                          <View style={{ gap: 4 }}>
+                          <View style={{ gap: 6 }}>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: DESIGN.gold }} />
-                                <Text style={{ fontSize: 10, fontWeight: '600', color: DESIGN.textSecondary }}>Gold</Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: DESIGN.gold }} />
+                                <Text style={{ fontSize: 11, fontWeight: '500', color: DESIGN.textSecondary }}>Gold</Text>
                               </View>
-                              <Text style={{ fontSize: 12, fontWeight: '800', color: DESIGN.textPrimary }}>{todayStats.tiers.gold}</Text>
+                              <Text style={{ fontSize: 14, fontWeight: '700', color: DESIGN.textPrimary, letterSpacing: -0.3 }}>{todayStats.tiers.gold}</Text>
                             </View>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#9E9E9E' }} />
-                                <Text style={{ fontSize: 10, fontWeight: '600', color: DESIGN.textSecondary }}>Silver</Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#B0B0B0' }} />
+                                <Text style={{ fontSize: 11, fontWeight: '500', color: DESIGN.textSecondary }}>Silver</Text>
                               </View>
-                              <Text style={{ fontSize: 12, fontWeight: '800', color: DESIGN.textPrimary }}>{todayStats.tiers.silver}</Text>
+                              <Text style={{ fontSize: 14, fontWeight: '700', color: DESIGN.textPrimary, letterSpacing: -0.3 }}>{todayStats.tiers.silver}</Text>
                             </View>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#A855F7' }} />
-                                <Text style={{ fontSize: 10, fontWeight: '600', color: DESIGN.textSecondary }}>Platinum</Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#A855F7' }} />
+                                <Text style={{ fontSize: 11, fontWeight: '500', color: DESIGN.textSecondary }}>Platinum</Text>
                               </View>
-                              <Text style={{ fontSize: 12, fontWeight: '800', color: DESIGN.textPrimary }}>{todayStats.tiers.platinum}</Text>
+                              <Text style={{ fontSize: 14, fontWeight: '700', color: DESIGN.textPrimary, letterSpacing: -0.3 }}>{todayStats.tiers.platinum}</Text>
                             </View>
                           </View>
                           {/* Segmented bar */}
-                          <View style={{ height: 5, borderRadius: 3, flexDirection: 'row', overflow: 'hidden', backgroundColor: 'rgba(0,0,0,0.05)', gap: 1 }}>
+                          <View style={{ height: 4, borderRadius: 2, flexDirection: 'row', overflow: 'hidden', backgroundColor: 'rgba(0,0,0,0.06)', gap: 1 }}>
                             {total > 0 ? (
                               <>
                                 {goldP > 0 && <View style={{ flex: goldP, backgroundColor: DESIGN.gold }} />}
-                                {silverP > 0 && <View style={{ flex: silverP, backgroundColor: '#9E9E9E' }} />}
+                                {silverP > 0 && <View style={{ flex: silverP, backgroundColor: '#B0B0B0' }} />}
                                 {platP > 0 && <View style={{ flex: platP, backgroundColor: '#A855F7' }} />}
                               </>
-                            ) : <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.05)' }} />}
+                            ) : <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.06)' }} />}
                           </View>
                         </View>
                       );
@@ -901,7 +921,16 @@ export default function CashierDashboard() {
 
               <View ref={promosBentoRef} collapsable={false}>
                 <SquishyBento onPress={() => openModal('PROMOS', promosBentoRef)} style={[styles.bentoBox, styles.bentoBoxWide]}>
-                  <View style={styles.wideBoxContent}><View><Text style={styles.bentoLabel}>Top Redeemed Promo</Text><Text style={styles.wideBoxTitle}>{dailyStats.promos.length > 0 ? dailyStats.promos[0].title : 'Belum Ada'}</Text></View><Ticket size={32} color={DESIGN.textSecondary} strokeWidth={1.5} /></View>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flex: 1 }}>
+                    <View style={{ flex: 1, marginRight: 16 }}>
+                      <Text style={styles.bentoLabel}>Top Redeemed Promo</Text>
+                      <Text style={[styles.wideBoxTitle, { marginTop: 6 }]} numberOfLines={1}>{dailyStats.promos.length > 0 ? dailyStats.promos[0].title : 'No promo today'}</Text>
+                    </View>
+                    <View style={{ alignItems: 'flex-end', minWidth: 40 }}>
+                      <Ticket size={18} color={DESIGN.textSecondary} strokeWidth={1.5} />
+                      {dailyStats.promos.length > 0 && <Text style={{ fontSize: 18, fontWeight: '900', color: DESIGN.textPrimary, marginTop: 4, letterSpacing: -0.5 }}>{dailyStats.promos[0].count}×</Text>}
+                    </View>
+                  </View>
                 </SquishyBento>
               </View>
               <View style={{ height: 120 }} />
@@ -1183,27 +1212,27 @@ const styles = StyleSheet.create({
   tabText: { fontSize: 13, fontWeight: '600', color: DESIGN.textSecondary, letterSpacing: 0.5 },
   tabTextActive: { color: DESIGN.textPrimary, fontWeight: '800' },
 
-  scrollContent: { paddingHorizontal: 24, paddingBottom: 40 },
-  bentoContainer: { gap: 16 },
-  heroBlackCard: { backgroundColor: DESIGN.surfaceDark, borderRadius: 32, padding: 24, height: 180, justifyContent: 'space-between', shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.2, shadowRadius: 24, elevation: 10 },
+  scrollContent: { paddingHorizontal: 20, paddingBottom: 40 },
+  bentoContainer: { gap: 12 },
+  heroBlackCard: { backgroundColor: DESIGN.surfaceDark, borderRadius: 28, padding: 22, height: 172, justifyContent: 'space-between', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.18, shadowRadius: 20, elevation: 10 },
   heroTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   badgeGlow: { backgroundColor: DESIGN.glowRed, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100, borderWidth: 1, borderColor: 'rgba(211, 35, 42, 0.5)' },
   badgeText: { color: DESIGN.brandRed, fontSize: 10, fontWeight: '900', letterSpacing: 1.5 },
   heroBottom: { marginTop: 'auto' },
-  heroLabel: { color: DESIGN.textSecondary, fontSize: 13, fontWeight: '600', marginBottom: 4 },
-  heroValue: { color: DESIGN.surface, fontSize: 38, fontWeight: '900', letterSpacing: -1.5 },
-  currency: { fontSize: 24, color: DESIGN.textSecondary },
-  decimals: { fontSize: 24, color: DESIGN.textSecondary },
-  bentoRow: { flexDirection: 'row', gap: 16 },
-  bentoBox: { backgroundColor: DESIGN.surface, borderRadius: 28, padding: 20, borderWidth: 1, borderColor: DESIGN.border, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.02, shadowRadius: 12 },
+  heroLabel: { color: 'rgba(255,255,255,0.45)', fontSize: 11, fontWeight: '600', marginBottom: 8, letterSpacing: 0.8 },
+  heroValue: { color: DESIGN.surface, fontSize: 36, fontWeight: '800', letterSpacing: -1.5 },
+  currency: { fontSize: 22, color: 'rgba(255,255,255,0.4)', fontWeight: '600' },
+  decimals: { fontSize: 22, color: 'rgba(255,255,255,0.4)' },
+  bentoRow: { flexDirection: 'row', gap: 12 },
+  bentoBox: { backgroundColor: DESIGN.surface, borderRadius: 24, padding: 18, borderWidth: 1, borderColor: 'rgba(0,0,0,0.04)', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8 },
   bentoBoxSmall: { flex: 1, height: 160, justifyContent: 'space-between' },
-  bentoBoxWide: { width: '100%', height: 100, justifyContent: 'center' },
+  bentoBoxWide: { width: '100%', height: 88, justifyContent: 'center' },
   wideBoxContent: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  wideBoxTitle: { fontSize: 18, fontWeight: '800', color: DESIGN.textPrimary, marginTop: 4, letterSpacing: -0.5 },
-  iconWrapperDark: { width: 44, height: 44, borderRadius: 22, backgroundColor: DESIGN.surfaceDark, justifyContent: 'center', alignItems: 'center' },
-  iconWrapperGold: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(212, 175, 55, 0.1)', justifyContent: 'center', alignItems: 'center' },
-  bentoValue: { fontSize: 28, fontWeight: '900', color: DESIGN.textPrimary, letterSpacing: -1 },
-  bentoLabel: { fontSize: 13, fontWeight: '600', color: DESIGN.textSecondary },
+  wideBoxTitle: { fontSize: 16, fontWeight: '700', color: DESIGN.textPrimary, letterSpacing: -0.3 },
+  iconWrapperDark: { width: 40, height: 40, borderRadius: 20, backgroundColor: DESIGN.surfaceDark, justifyContent: 'center', alignItems: 'center' },
+  iconWrapperGold: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(212, 175, 55, 0.1)', justifyContent: 'center', alignItems: 'center' },
+  bentoValue: { fontSize: 30, fontWeight: '800', color: DESIGN.textPrimary, letterSpacing: -1 },
+  bentoLabel: { fontSize: 11, fontWeight: '600', color: DESIGN.textSecondary, letterSpacing: 0.2 },
   
   floatingWrapper: { position: 'absolute', bottom: Platform.OS === 'ios' ? 40 : 24, alignSelf: 'center' },
   scanPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: DESIGN.brandRed, padding: 8, paddingRight: 32, borderRadius: 100, shadowColor: DESIGN.brandRed, shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.4, shadowRadius: 24, elevation: 12 },
