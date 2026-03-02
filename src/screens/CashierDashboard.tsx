@@ -10,7 +10,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { BlurView } from 'expo-blur';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import Svg, { Path, Defs, LinearGradient, Stop, Circle } from 'react-native-svg';
 
 // --- IMPORT ZUSTAND & FIREBASE ---
 import { useCashierStore } from '../store/useCashierStore';
@@ -237,27 +236,49 @@ const MemberDetailPage = ({ visible, onClose, onShowAlert }: { visible: boolean,
       </View>
 
       <PopModal visible={selectedHistoryItem !== null} onClose={() => setSelectedHistoryItem(null)}>
-         <View style={styles.voucherModalCardInner}>
-            <Pressable style={styles.modalCloseIcon} onPress={() => setSelectedHistoryItem(null)}><X size={20} color={DESIGN.textSecondary} strokeWidth={2.5} /></Pressable>
-            <View style={[styles.voucherModalIcon, selectedHistoryItem?.type === 'REDEEM' ? {backgroundColor: 'rgba(211, 35, 42, 0.1)'} : {backgroundColor: 'rgba(0,0,0,0.05)'}]}>
-              {selectedHistoryItem?.type === 'REDEEM' ? <Ticket size={28} color={DESIGN.brandRed} /> : <ShoppingBag size={28} color={DESIGN.textPrimary} />}
+        <View style={styles.historyDetailCard}>
+          <View style={styles.historyDetailPill} />
+          <View style={styles.historyDetailHeader}>
+            <View style={[styles.historyDetailIconBox, selectedHistoryItem?.type === 'REDEEM' ? { backgroundColor: 'rgba(211,35,42,0.1)' } : { backgroundColor: DESIGN.canvas }]}>
+              {selectedHistoryItem?.type === 'REDEEM' ? <Ticket size={20} color={DESIGN.brandRed} strokeWidth={2} /> : <ShoppingBag size={20} color={DESIGN.textPrimary} strokeWidth={2} />}
             </View>
-            <Text style={styles.voucherModalTitle}>{selectedHistoryItem?.type === 'REDEEM' ? 'Detail Redeem Voucher' : 'Detail Pembelian'}</Text>
-            <Text style={{color: DESIGN.textSecondary, fontSize: 13, marginBottom: 24}}>{selectedHistoryItem?.createdAt?.toDate ? new Date(selectedHistoryItem.createdAt.toDate()).toLocaleDateString('id-ID', {day:'numeric', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit'}) : '-'}</Text>
-            <View style={{width: '100%', marginBottom: 24}}>
-              <View style={styles.historyDetailRow}><Text style={styles.historyDetailLabel}>ID Transaksi</Text><Text style={styles.historyDetailValue}>{selectedHistoryItem?.posTransactionId || selectedHistoryItem?.id}</Text></View>
-              <View style={styles.historyDetailRow}><Text style={styles.historyDetailLabel}>Dilayani Oleh</Text><Text style={[styles.historyDetailValue, {color: DESIGN.textSecondary}]}>{selectedHistoryItem?.cashierName || 'Kasir'} • Store {selectedHistoryItem?.storeId}</Text></View>
-              {selectedHistoryItem?.type === 'EARN' ? (
-                <>
-                  <View style={styles.historyDetailRow}><Text style={styles.historyDetailLabel}>Total Belanja</Text><Text style={styles.historyDetailValue}>Rp {formatRupiah(selectedHistoryItem?.totalAmount || 0)}</Text></View>
-                  <View style={[styles.historyDetailRow, {borderBottomWidth: 0}]}><Text style={styles.historyDetailLabel}>Poin Didapat</Text><Text style={[styles.historyDetailValue, {color: DESIGN.successGreen}]}>+{selectedHistoryItem?.pointsEarned} Pts</Text></View>
-                </>
-              ) : (
-                <View style={[styles.historyDetailRow, {borderBottomWidth: 0}]}><Text style={styles.historyDetailLabel}>Voucher Terpakai</Text><Text style={[styles.historyDetailValue, {color: DESIGN.brandRed}]}>{selectedHistoryItem?.voucherTitle || '-'}</Text></View>
-              )}
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={styles.historyDetailTitle}>{selectedHistoryItem?.type === 'REDEEM' ? 'Voucher Redeemed' : 'Purchase'}</Text>
+              <Text style={styles.historyDetailDate}>{selectedHistoryItem?.createdAt?.toDate ? new Date(selectedHistoryItem.createdAt.toDate()).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}</Text>
             </View>
-            <Pressable style={styles.modalFullBtn} onPress={() => setSelectedHistoryItem(null)}><Text style={styles.modalFullBtnText}>Tutup Detail</Text></Pressable>
-         </View>
+            <Pressable style={styles.historyDetailClose} onPress={() => setSelectedHistoryItem(null)}>
+              <X size={16} color={DESIGN.textSecondary} strokeWidth={2.5} />
+            </Pressable>
+          </View>
+          {selectedHistoryItem?.type === 'EARN' && (
+            <View style={styles.historyDetailAmountBox}>
+              <Text style={styles.historyDetailAmountLabel}>TOTAL BELANJA</Text>
+              <Text style={styles.historyDetailAmount}>Rp {formatRupiah(selectedHistoryItem?.totalAmount || 0)}</Text>
+            </View>
+          )}
+          {selectedHistoryItem?.type === 'REDEEM' && (
+            <View style={[styles.historyDetailAmountBox, { backgroundColor: 'rgba(211,35,42,0.06)' }]}>
+              <Text style={[styles.historyDetailAmountLabel, { color: DESIGN.brandRed }]}>VOUCHER</Text>
+              <Text style={[styles.historyDetailAmount, { color: DESIGN.brandRed, fontSize: 20 }]} numberOfLines={1}>{selectedHistoryItem?.voucherTitle || '-'}</Text>
+            </View>
+          )}
+          <View style={styles.historyDetailRows}>
+            <View style={styles.historyDetailRow}>
+              <Text style={styles.historyDetailLabel}>Receipt ID</Text>
+              <Text style={styles.historyDetailValue}>{selectedHistoryItem?.posTransactionId || selectedHistoryItem?.id || '-'}</Text>
+            </View>
+            <View style={styles.historyDetailRow}>
+              <Text style={styles.historyDetailLabel}>Kasir</Text>
+              <Text style={styles.historyDetailValue}>{selectedHistoryItem?.cashierName || '-'}</Text>
+            </View>
+            {selectedHistoryItem?.type === 'EARN' && selectedHistoryItem?.pointsEarned > 0 && (
+              <View style={[styles.historyDetailRow, { borderBottomWidth: 0 }]}>
+                <Text style={styles.historyDetailLabel}>Poin Didapat</Text>
+                <Text style={[styles.historyDetailValue, { color: DESIGN.successGreen }]}>+{selectedHistoryItem?.pointsEarned} pts</Text>
+              </View>
+            )}
+          </View>
+        </View>
       </PopModal>
 
       <PopModal visible={isTrxModalVisible} onClose={() => setTrxModalVisible(false)} keyboardPadding={true}>
@@ -318,6 +339,14 @@ export default function CashierDashboard() {
   const [rawTransactions, setRawTransactions] = useState<any[]>([]);
   const [selectedFilterDate, setSelectedFilterDate] = useState<Date>(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [datePickerMounted, setDatePickerMounted] = useState(false);
+  const datePickerAnim = useRef(new Animated.Value(0)).current;
+
+  // Status pill morph animation
+  const STATUS_ORDER = { live: 0, updated: 1, offline: 2, error: 3 } as const;
+  const statusMorphAnim = useRef(new Animated.Value(0)).current;
+  const pillTextOpacity = useRef(new Animated.Value(1)).current;
+  const [pillLabel, setPillLabel] = useState<string>('LIVE');
 
   const [dailyStats, setDailyStats] = useState({
      revenue: 0, transactions: 0, memberVisits: 0, 
@@ -586,9 +615,35 @@ export default function CashierDashboard() {
   const handleTabPress = (index: number) => { setActiveTab(index); flatListRef.current?.scrollToIndex({ index, animated: true }); };
   const handleMomentumScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => { const offsetX = event.nativeEvent.contentOffset.x; const newIndex = Math.round(offsetX / width); if (newIndex !== activeTab) setActiveTab(newIndex); };
   const tabTranslateX = scrollX.interpolate({ inputRange: [0, width, width * 2], outputRange: [0, TAB_SEGMENT_WIDTH, TAB_SEGMENT_WIDTH * 2], extrapolate: 'clamp' });
+  const pillBg = statusMorphAnim.interpolate({ inputRange: [0, 1, 2, 3], outputRange: ['#34C759', '#007AFF', '#FF9500', '#FF3B30'] });
+
+  useEffect(() => {
+    if (showDatePicker) {
+      Animated.spring(datePickerAnim, { toValue: 1, friction: 8, tension: 70, useNativeDriver: true }).start();
+    } else {
+      Animated.timing(datePickerAnim, { toValue: 0, duration: 260, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(() => setDatePickerMounted(false));
+    }
+  }, [showDatePicker]);
+
+  // Status pill morph: smooth color interpolation + text cross-fade
+  useEffect(() => {
+    Animated.spring(statusMorphAnim, {
+      toValue: STATUS_ORDER[syncStatus],
+      useNativeDriver: false,
+      tension: 90,
+      friction: 10,
+    }).start();
+    Animated.timing(pillTextOpacity, { toValue: 0, duration: 80, useNativeDriver: true }).start(() => {
+      setPillLabel(syncStatus === 'live' ? 'LIVE' : syncStatus === 'updated' ? 'UPDATED' : syncStatus === 'offline' ? 'OFFLINE' : 'ERROR');
+      Animated.timing(pillTextOpacity, { toValue: 1, duration: 160, useNativeDriver: true }).start();
+    });
+  }, [syncStatus]);
+
+  const openDatePicker = () => { setDatePickerMounted(true); setShowDatePicker(true); };
+  const closeDatePicker = () => setShowDatePicker(false);
 
   const openModal = (type: ModalType, bentoRef?: React.RefObject<any>) => {
-    setShowDatePicker(false);
+    setShowDatePicker(false); setDatePickerMounted(false); datePickerAnim.setValue(0);
 
     const doOpen = (ox: number, oy: number, ow: number, oh: number) => {
       // Pre-reset all values before Modal mounts
@@ -629,7 +684,7 @@ export default function CashierDashboard() {
   };
 
   const closeModal = () => {
-    setShowDatePicker(false);
+    setShowDatePicker(false); setDatePickerMounted(false); datePickerAnim.setValue(0);
     // Step 1: fade content out (native driver)
     Animated.timing(contentOpacity, { toValue: 0, duration: 130, useNativeDriver: true }).start(() => {
       // Step 2: shrink card (JS driver) + fade backdrop (native driver) — run separately, not in parallel()
@@ -658,7 +713,7 @@ export default function CashierDashboard() {
 
         <Pressable 
           style={styles.datePickerPill} 
-          onPress={() => setShowDatePicker(true)} 
+          onPress={() => openDatePicker()} 
           hitSlop={{top: 15, bottom: 15, left: 15, right: 15}}
         >
           <Calendar size={16} color={DESIGN.textPrimary} style={{marginRight: 8}} />
@@ -677,46 +732,75 @@ export default function CashierDashboard() {
     );
   };
 
-  // --- 🔥 RENDER LINE CHART APPLE STOCKS STYLE ---
-  const renderLineChart = () => {
-     const displayHours = [8,9,10,11,12,13,14,15,16,17,18,19,20,21,22];
-     const chartWidth = width - 88; // Full lebar layar dikurang padding kiri-kanan
-     const chartHeight = 120;
-     const maxVal = dailyStats.maxHourValue || 1;
-     const stepX = chartWidth / (displayHours.length - 1);
+  // --- � RENDER REVENUE BAR CHART (per jam) ---
+  const renderRevenueChart = () => {
+    const displayHours = [8,9,10,11,12,13,14,15,16,17,18,19,20,21,22];
+    const maxVal = dailyStats.maxHourValue || 1;
+    const fmtShort = (v: number) => v >= 1000000 ? `${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `${Math.round(v / 1000)}k` : `${v}`;
 
-     // Koordinat Titik Chart
-     const points = displayHours.map((h, i) => {
-        const val = dailyStats.hourlyChart[h] || 0;
-        return { x: i * stepX, y: chartHeight - (val / maxVal) * chartHeight, val };
-     });
+    const peakHour = displayHours.reduce((best, h) =>
+      (dailyStats.hourlyChart[h] || 0) > (dailyStats.hourlyChart[best] || 0) ? h : best,
+      displayHours[0]
+    );
+    const peakVal = dailyStats.hourlyChart[peakHour] || 0;
+    const totalHoursActive = displayHours.filter(h => (dailyStats.hourlyChart[h] || 0) > 0).length;
 
-     const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x},${p.y}`).join(' ');
-     const fillD = `${pathD} L ${chartWidth},${chartHeight} L 0,${chartHeight} Z`;
-
-     return (
-        <View style={styles.chartContainer}>
-           <Svg width={chartWidth} height={chartHeight}>
-              <Defs>
-                <LinearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
-                  <Stop offset="0" stopColor={DESIGN.brandRed} stopOpacity="0.4" />
-                  <Stop offset="1" stopColor={DESIGN.brandRed} stopOpacity="0.0" />
-                </LinearGradient>
-              </Defs>
-              <Path d={fillD} fill="url(#grad)" />
-              <Path d={pathD} fill="none" stroke={DESIGN.brandRed} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-              {points.map((p, i) => p.val > 0 && (
-                 <Circle key={i} cx={p.x} cy={p.y} r="5" fill={DESIGN.surface} stroke={DESIGN.brandRed} strokeWidth="2" />
-              ))}
-           </Svg>
-           <View style={styles.chartXAxis}>
-              {displayHours.map((h, i) => (
-                 <Text key={h} style={[styles.chartHourText, { position: 'absolute', left: (i * stepX) - 10 }]}>{i % 3 === 0 ? `${h}:00` : ''}</Text>
-              ))}
-           </View>
+    return (
+      <View>
+        {/* Peak summary row */}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 14 }}>
+          <View>
+            <Text style={{ fontSize: 11, fontWeight: '600', color: DESIGN.textSecondary, letterSpacing: 0.2, marginBottom: 2 }}>REVENUE PER JAM</Text>
+            <Text style={{ fontSize: 11, fontWeight: '600', color: DESIGN.textSecondary }}>
+              {totalHoursActive > 0 ? `${totalHoursActive} jam aktif` : 'Belum ada data'}
+            </Text>
+          </View>
+          {peakVal > 0 && (
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={{ fontSize: 10, fontWeight: '600', color: DESIGN.textSecondary }}>Peak Hour</Text>
+              <Text style={{ fontSize: 13, fontWeight: '800', color: DESIGN.brandRed, letterSpacing: -0.3 }}>
+                {peakHour < 12 ? `${peakHour}:00 AM` : `${peakHour > 12 ? peakHour - 12 : 12}:00 PM`} · Rp {fmtShort(peakVal)}
+              </Text>
+            </View>
+          )}
         </View>
-     );
-  }
+
+        {/* Bars */}
+        <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: 80, gap: 3 }}>
+          {displayHours.map(h => {
+            const val = dailyStats.hourlyChart[h] || 0;
+            const barH = val > 0 ? Math.max(5, Math.round((val / maxVal) * 80)) : 3;
+            const isPeak = h === peakHour && val > 0;
+            const hasVal = val > 0;
+            return (
+              <View key={h} style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-end' }}>
+                {isPeak && (
+                  <Text style={{ fontSize: 8, fontWeight: '800', color: DESIGN.brandRed, marginBottom: 3, letterSpacing: -0.2 }}>
+                    {fmtShort(val)}
+                  </Text>
+                )}
+                <View style={{
+                  width: '100%',
+                  height: barH,
+                  backgroundColor: isPeak ? DESIGN.brandRed : hasVal ? `${DESIGN.brandRed}35` : `${DESIGN.canvas}`,
+                  borderRadius: 3,
+                }} />
+              </View>
+            );
+          })}
+        </View>
+
+        {/* X-axis labels */}
+        <View style={{ flexDirection: 'row', marginTop: 5, gap: 3 }}>
+          {displayHours.map((h, i) => (
+            <Text key={h} style={{ flex: 1, fontSize: 8.5, fontWeight: '600', color: DESIGN.textSecondary, textAlign: 'center' }}>
+              {i % 3 === 0 ? `${h}` : ''}
+            </Text>
+          ))}
+        </View>
+      </View>
+    );
+  };
 
   const renderModalContent = () => {
     if (!activeModal) return null;
@@ -734,44 +818,68 @@ export default function CashierDashboard() {
     return (
       <>
         {/* DATE PICKER OVERLAY */}
-        {showDatePicker && (
+        {/* Android: native dialog manages its own presentation — no custom sheet needed */}
+        {Platform.OS === 'android' && showDatePicker && (
+          <DateTimePicker
+            value={selectedFilterDate}
+            mode="date"
+            display="default"
+            onChange={(e: any, d?: Date) => {
+              closeDatePicker();
+              if (d) setSelectedFilterDate(d);
+            }}
+          />
+        )}
+        {/* iOS: animated slide-up sheet with inline spinner */}
+        {Platform.OS === 'ios' && datePickerMounted && (
           <>
-            <TouchableWithoutFeedback onPress={() => setShowDatePicker(false)}>
-              <View style={{ ...StyleSheet.absoluteFillObject, zIndex: 999 }} />
+            <TouchableWithoutFeedback onPress={closeDatePicker}>
+              <Animated.View style={{
+                ...StyleSheet.absoluteFillObject,
+                zIndex: 999,
+                backgroundColor: '#000',
+                opacity: datePickerAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.28] }),
+              }} />
             </TouchableWithoutFeedback>
-            <View style={styles.datePickerOverlay}>
-              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', padding: 16, borderBottomWidth: 1, borderColor: DESIGN.canvas }}>
-                <Pressable onPress={() => setShowDatePicker(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                  <Text style={{ color: DESIGN.brandRed, fontWeight: 'bold', fontSize: 16 }}>Done</Text>
+            <Animated.View style={[
+              styles.datePickerOverlay,
+              {
+                transform: [{ translateY: datePickerAnim.interpolate({ inputRange: [0, 1], outputRange: [320, 0] }) }],
+                opacity: datePickerAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 1, 1] }),
+              }
+            ]}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderColor: DESIGN.canvas }}>
+                <Text style={{ fontSize: 15, fontWeight: '700', color: DESIGN.textPrimary }}>Pilih Tanggal</Text>
+                <Pressable onPress={closeDatePicker} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Text style={{ color: DESIGN.brandRed, fontWeight: '700', fontSize: 15 }}>Selesai</Text>
                 </Pressable>
               </View>
               <DateTimePicker
                 value={selectedFilterDate}
                 mode="date"
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                display="spinner"
                 onChange={(e: any, d?: Date) => {
-                  if (Platform.OS === 'android') setShowDatePicker(false);
                   if (d) setSelectedFilterDate(d);
                 }}
               />
-            </View>
+            </Animated.View>
           </>
         )}
 
         {/* HEADER */}
         <View style={styles.floatingModalHeader}>
           <View style={[styles.floatingModalIconBox, { backgroundColor: `${accentColor}18` }]}>
-            {activeModal === 'REVENUE' && <TrendingUp color={accentColor} size={22} />}
-            {activeModal === 'MEMBERS' && <Users color={accentColor} size={22} />}
-            {activeModal === 'TIERS' && <Crown color={accentColor} size={22} />}
-            {activeModal === 'PROMOS' && <Ticket color={accentColor} size={22} />}
+            {activeModal === 'REVENUE' && <TrendingUp color={accentColor} size={20} />}
+            {activeModal === 'MEMBERS' && <Users color={accentColor} size={20} />}
+            {activeModal === 'TIERS' && <Crown color={accentColor} size={20} />}
+            {activeModal === 'PROMOS' && <Ticket color={accentColor} size={20} />}
           </View>
-          <View style={{ flex: 1, marginLeft: 14 }}>
+          <View style={{ flex: 1, marginLeft: 12 }}>
             <Text style={styles.floatingModalTitle}>{modalTitle}</Text>
             <Text style={styles.floatingModalSub} numberOfLines={1}>{modalSub}</Text>
           </View>
           <Pressable style={styles.floatingModalCloseBtn} onPress={closeModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <X size={20} color={DESIGN.textSecondary} strokeWidth={2.5} />
+            <X size={16} color={DESIGN.textSecondary} strokeWidth={2.5} />
           </Pressable>
         </View>
 
@@ -783,7 +891,7 @@ export default function CashierDashboard() {
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.floatingModalBody} bounces={true}>
           {activeModal === 'REVENUE' && (
             <View>
-              <View style={styles.dummyChartBox}>{renderLineChart()}</View>
+              <View style={styles.dummyChartBox}>{renderRevenueChart()}</View>
               <View style={styles.kpiRow}>
                 <View style={styles.kpiBox}><Text style={styles.kpiLabel}>Avg. Order Value</Text><Text style={styles.kpiValue}>Rp {formatRupiah(dailyStats.transactions > 0 ? Math.floor(dailyStats.revenue / dailyStats.transactions) : 0)}</Text></View>
                 <View style={styles.kpiBox}><Text style={styles.kpiLabel}>Total Transactions</Text><Text style={styles.kpiValue}>{dailyStats.transactions}</Text></View>
@@ -794,31 +902,50 @@ export default function CashierDashboard() {
             <View>
               {dailyStats.membersList.length > 0 ? dailyStats.membersList.slice(0, 10).map((m, i) => (
                 <View key={i} style={styles.memberListItem}>
-                  <View style={styles.memberAvatar}><Text style={{ color: '#FFF', fontWeight: 'bold' }}>{m.name ? m.name.charAt(0).toUpperCase() : 'M'}</Text></View>
-                  <View style={{ flex: 1, marginLeft: 16 }}>
+                  <View style={styles.memberAvatar}><Text style={{ color: '#FFF', fontWeight: '700', fontSize: 13 }}>{m.name ? m.name.charAt(0).toUpperCase() : 'M'}</Text></View>
+                  <View style={{ flex: 1, marginLeft: 12 }}>
                     <Text style={styles.memberName}>{m.name || 'Pelanggan'}</Text>
-                    <Text style={styles.memberTime}>{m.time.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</Text>
                   </View>
-                  <ChevronRight size={20} color={DESIGN.border} />
+                  <Text style={styles.memberTimeBadge}>{m.time.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</Text>
                 </View>
-              )) : <Text style={{ color: DESIGN.textSecondary, fontStyle: 'italic', textAlign: 'center', paddingVertical: 32 }}>Belum ada member tercatat.</Text>}
+              )) : <Text style={{ color: DESIGN.textSecondary, fontStyle: 'italic', textAlign: 'center', paddingVertical: 24 }}>Belum ada member tercatat.</Text>}
             </View>
           )}
           {activeModal === 'TIERS' && (
-            <View>
-              <View style={styles.tierStatRow}><View style={styles.tierBarContainer}><View style={[styles.tierBar, { width: `${goldP}%`, backgroundColor: DESIGN.gold }]} /></View><Text style={styles.tierStatText}>{dailyStats.tiers.gold} members · {goldP}% Gold</Text></View>
-              <View style={styles.tierStatRow}><View style={styles.tierBarContainer}><View style={[styles.tierBar, { width: `${silverP}%`, backgroundColor: DESIGN.textSecondary }]} /></View><Text style={styles.tierStatText}>{dailyStats.tiers.silver} members · {silverP}% Silver</Text></View>
-              <View style={styles.tierStatRow}><View style={styles.tierBarContainer}><View style={[styles.tierBar, { width: `${platP}%`, backgroundColor: '#A855F7' }]} /></View><Text style={styles.tierStatText}>{dailyStats.tiers.platinum} members · {platP}% Platinum</Text></View>
+            <View style={{ gap: 14 }}>
+              {[
+                { label: 'Gold', count: dailyStats.tiers.gold, pct: goldP, color: DESIGN.gold },
+                { label: 'Silver', count: dailyStats.tiers.silver, pct: silverP, color: DESIGN.textSecondary },
+                { label: 'Platinum', count: dailyStats.tiers.platinum, pct: platP, color: '#A855F7' },
+              ].map(({ label, count, pct, color }) => (
+                <View key={label} style={styles.tierStatRow}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+                      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
+                      <Text style={styles.tierStatLabel}>{label}</Text>
+                    </View>
+                    <Text style={styles.tierStatCount}>{count} members · {pct}%</Text>
+                  </View>
+                  <View style={styles.tierBarContainer}>
+                    <View style={[styles.tierBar, { width: `${pct}%`, backgroundColor: color }]} />
+                  </View>
+                </View>
+              ))}
             </View>
           )}
           {activeModal === 'PROMOS' && (
             <View>
               {dailyStats.promos.length > 0 ? dailyStats.promos.map((p, i) => (
                 <View key={i} style={styles.promoCardModal}>
-                  <View><Text style={styles.promoTitle}>{p.title}</Text><Text style={styles.promoCount}>{p.count} Redeemed</Text></View>
-                  <ChevronRight size={24} color={DESIGN.textSecondary} />
+                  <View style={{ flex: 1, marginRight: 12 }}>
+                    <Text style={styles.promoTitle} numberOfLines={1}>{p.title}</Text>
+                    <Text style={styles.promoCount}>{p.count} Redeemed</Text>
+                  </View>
+                  <View style={styles.promoCountBadge}>
+                    <Text style={styles.promoCountBadgeText}>{p.count}</Text>
+                  </View>
                 </View>
-              )) : <Text style={{ color: DESIGN.textSecondary, fontStyle: 'italic', textAlign: 'center', paddingVertical: 32 }}>Belum ada promo yang diredeem.</Text>}
+              )) : <Text style={{ color: DESIGN.textSecondary, fontStyle: 'italic', textAlign: 'center', paddingVertical: 24 }}>Belum ada promo yang diredeem.</Text>}
             </View>
           )}
           <View style={{ height: 24 }} />
@@ -959,26 +1086,36 @@ export default function CashierDashboard() {
                   if (historyTab === 'TRANSACTIONS') {
                     return (
                       <Pressable style={({pressed}) => [styles.historyRow, pressed && { backgroundColor: 'rgba(0,0,0,0.02)', transform: [{scale: 0.98}] }]} onPress={() => setSelectedHistoryItem(item)}>
-                         <View style={styles.historyIconBox}>{item.method === 'Cash' ? <Banknote size={20} color={DESIGN.textPrimary} /> : <Smartphone size={20} color={DESIGN.textPrimary} />}</View>
-                         <View style={styles.historyInfo}>
-                            <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 2}}>
-                               <Text style={styles.historyTrxId}>{item.id}</Text>
-                               {item.pointsEarned > 0 && (<View style={[styles.historyPointBadge, item.pointStatus === 'RELEASED' ? {backgroundColor: 'rgba(50, 215, 75, 0.1)'} : {}]}><Text style={[styles.historyPointTextBadge, item.pointStatus === 'RELEASED' ? {color: DESIGN.successGreen} : {}]}>+{item.pointsEarned} Pts</Text></View>)}
+                        <View style={styles.historyIconBox}>
+                          <ShoppingBag size={17} color={DESIGN.textPrimary} strokeWidth={2} />
+                        </View>
+                        <View style={styles.historyInfo}>
+                          <Text style={styles.historyTrxId} numberOfLines={1}>{item.posTransactionId || item.id}</Text>
+                          <Text style={styles.historyDetails}>{item.time}{item.member ? ` · ${item.member}` : ' · Anonym'}</Text>
+                        </View>
+                        <View style={styles.historyTotalBox}>
+                          <Text style={styles.historyTotalText}>{item.total}</Text>
+                          {item.pointsEarned > 0 && (
+                            <View style={[styles.historyPointBadge, item.pointStatus === 'RELEASED' && { backgroundColor: 'rgba(50,215,75,0.1)' }]}>
+                              <Text style={[styles.historyPointTextBadge, item.pointStatus === 'RELEASED' && { color: DESIGN.successGreen }]}>+{item.pointsEarned} pts</Text>
                             </View>
-                            <Text style={styles.historyDetails}>{item.time} • {item.items} Items {item.member ? `• ${item.member}` : ''}</Text>
-                         </View>
-                         <View style={styles.historyTotalBox}><Text style={styles.historyTotalText}>{item.total}</Text></View>
+                          )}
+                        </View>
                       </Pressable>
                     );
                   } else {
                     return (
                       <Pressable style={({pressed}) => [styles.historyRow, pressed && { backgroundColor: 'rgba(0,0,0,0.02)', transform: [{scale: 0.98}] }]} onPress={() => setSelectedHistoryItem(item)}>
-                         <View style={[styles.historyIconBox, {backgroundColor: 'rgba(211, 35, 42, 0.05)'}]}><Ticket size={20} color={DESIGN.brandRed} /></View>
-                         <View style={styles.historyInfo}>
-                            <Text style={[styles.historyTrxId, {marginBottom: 2}]}>{item.voucherTitle}</Text>
-                            <Text style={styles.historyDetails}>{item.time} • Redeemed by {item.member}</Text>
-                         </View>
-                         <View style={styles.historyTotalBox}><Text style={[styles.historyTotalText, {color: DESIGN.brandRed, fontSize: 13}]}>REDEEMED</Text></View>
+                        <View style={[styles.historyIconBox, { backgroundColor: 'rgba(211,35,42,0.07)' }]}>
+                          <Ticket size={17} color={DESIGN.brandRed} strokeWidth={2} />
+                        </View>
+                        <View style={styles.historyInfo}>
+                          <Text style={styles.historyTrxId} numberOfLines={1}>{item.voucherTitle}</Text>
+                          <Text style={styles.historyDetails}>{item.time}{item.member ? ` · ${item.member}` : ''}</Text>
+                        </View>
+                        <View style={styles.historyRedeemBadge}>
+                          <Text style={styles.historyRedeemBadgeText}>REDEEM</Text>
+                        </View>
                       </Pressable>
                     );
                   }
@@ -1035,9 +1172,9 @@ export default function CashierDashboard() {
             </View>
           </View>
           <View style={styles.headerRight}>
-            <View style={[styles.statusPill, { backgroundColor: syncStatus === 'live' ? '#34C759' : syncStatus === 'updated' ? '#007AFF' : syncStatus === 'offline' ? '#FF9500' : '#FF3B30' }]}>
-              <Text style={styles.statusPillText}>{syncStatus === 'live' ? 'LIVE' : syncStatus === 'updated' ? 'UPDATED' : syncStatus === 'offline' ? 'OFFLINE' : 'ERROR'}</Text>
-            </View>
+            <Animated.View style={[styles.statusPill, { backgroundColor: pillBg }]}>
+              <Animated.Text style={[styles.statusPillText, { opacity: pillTextOpacity }]}>{pillLabel}</Animated.Text>
+            </Animated.View>
           </View>
         </View>
 
@@ -1107,33 +1244,59 @@ export default function CashierDashboard() {
       <MemberDetailPage visible={isMemberPageVisible} onClose={() => setIsMemberPageVisible(false)} onShowAlert={showCustomAlert} />
 
       <PopModal visible={selectedHistoryItem !== null} onClose={() => setSelectedHistoryItem(null)}>
-         <View style={styles.voucherModalCardInner}>
-            <Pressable style={styles.modalCloseIcon} onPress={() => setSelectedHistoryItem(null)}>
-               <X size={20} color={DESIGN.textSecondary} strokeWidth={2.5} />
-            </Pressable>
-            <View style={[styles.voucherModalIcon, selectedHistoryItem?.type === 'REDEEM' ? {backgroundColor: 'rgba(211, 35, 42, 0.1)'} : {backgroundColor: 'rgba(0,0,0,0.05)'}]}>
-              {selectedHistoryItem?.type === 'REDEEM' ? <Ticket size={28} color={DESIGN.brandRed} /> : <ShoppingBag size={28} color={DESIGN.textPrimary} />}
+        <View style={styles.historyDetailCard}>
+          {/* Drag pill */}
+          <View style={styles.historyDetailPill} />
+          {/* Header */}
+          <View style={styles.historyDetailHeader}>
+            <View style={[styles.historyDetailIconBox, selectedHistoryItem?.type === 'REDEEM' ? { backgroundColor: 'rgba(211,35,42,0.1)' } : { backgroundColor: DESIGN.canvas }]}>
+              {selectedHistoryItem?.type === 'REDEEM' ? <Ticket size={20} color={DESIGN.brandRed} strokeWidth={2} /> : <ShoppingBag size={20} color={DESIGN.textPrimary} strokeWidth={2} />}
             </View>
-            <Text style={styles.voucherModalTitle}>{selectedHistoryItem?.type === 'REDEEM' ? 'Detail Redeem Voucher' : 'Detail Pembelian'}</Text>
-            <Text style={{color: DESIGN.textSecondary, fontSize: 13, marginBottom: 24}}>
-              {selectedHistoryItem?.createdAt?.toDate ? new Date(selectedHistoryItem.createdAt.toDate()).toLocaleDateString('id-ID', {day:'numeric', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit'}) : '-'}
-            </Text>
-            <View style={{width: '100%', marginBottom: 24}}>
-              <View style={styles.historyDetailRow}><Text style={styles.historyDetailLabel}>ID Transaksi</Text><Text style={styles.historyDetailValue}>{selectedHistoryItem?.posTransactionId || selectedHistoryItem?.id}</Text></View>
-              <View style={styles.historyDetailRow}><Text style={styles.historyDetailLabel}>Dilayani Oleh</Text><Text style={[styles.historyDetailValue, {color: DESIGN.textSecondary}]}>{selectedHistoryItem?.cashierName || 'Kasir'} • Store {selectedHistoryItem?.storeId}</Text></View>
-              {selectedHistoryItem?.type === 'EARN' ? (
-                <>
-                  <View style={styles.historyDetailRow}><Text style={styles.historyDetailLabel}>Total Belanja</Text><Text style={styles.historyDetailValue}>Rp {formatRupiah(selectedHistoryItem?.totalAmount || 0)}</Text></View>
-                  <View style={[styles.historyDetailRow, {borderBottomWidth: 0}]}><Text style={styles.historyDetailLabel}>Poin Didapat</Text><Text style={[styles.historyDetailValue, {color: DESIGN.successGreen}]}>+{selectedHistoryItem?.pointsEarned} Pts</Text></View>
-                </>
-              ) : (
-                <View style={[styles.historyDetailRow, {borderBottomWidth: 0}]}><Text style={styles.historyDetailLabel}>Voucher Terpakai</Text><Text style={[styles.historyDetailValue, {color: DESIGN.brandRed}]}>{selectedHistoryItem?.voucherTitle || '-'}</Text></View>
-              )}
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={styles.historyDetailTitle}>{selectedHistoryItem?.type === 'REDEEM' ? 'Voucher Redeemed' : 'Purchase'}</Text>
+              <Text style={styles.historyDetailDate}>{selectedHistoryItem?.createdAt?.toDate ? new Date(selectedHistoryItem.createdAt.toDate()).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}</Text>
             </View>
-            <Pressable style={styles.modalFullBtn} onPress={() => setSelectedHistoryItem(null)}>
-               <Text style={styles.modalFullBtnText}>Tutup Detail</Text>
+            <Pressable style={styles.historyDetailClose} onPress={() => setSelectedHistoryItem(null)}>
+              <X size={16} color={DESIGN.textSecondary} strokeWidth={2.5} />
             </Pressable>
-         </View>
+          </View>
+          {/* Hero amount */}
+          {selectedHistoryItem?.type === 'EARN' && (
+            <View style={styles.historyDetailAmountBox}>
+              <Text style={styles.historyDetailAmountLabel}>TOTAL BELANJA</Text>
+              <Text style={styles.historyDetailAmount}>Rp {formatRupiah(selectedHistoryItem?.totalAmount || 0)}</Text>
+            </View>
+          )}
+          {selectedHistoryItem?.type === 'REDEEM' && (
+            <View style={[styles.historyDetailAmountBox, { backgroundColor: 'rgba(211,35,42,0.06)' }]}>
+              <Text style={[styles.historyDetailAmountLabel, { color: DESIGN.brandRed }]}>VOUCHER</Text>
+              <Text style={[styles.historyDetailAmount, { color: DESIGN.brandRed, fontSize: 20 }]} numberOfLines={1}>{selectedHistoryItem?.voucherTitle || '-'}</Text>
+            </View>
+          )}
+          {/* Info rows */}
+          <View style={styles.historyDetailRows}>
+            <View style={styles.historyDetailRow}>
+              <Text style={styles.historyDetailLabel}>Receipt ID</Text>
+              <Text style={styles.historyDetailValue}>{selectedHistoryItem?.posTransactionId || selectedHistoryItem?.id || '-'}</Text>
+            </View>
+            <View style={styles.historyDetailRow}>
+              <Text style={styles.historyDetailLabel}>Kasir</Text>
+              <Text style={styles.historyDetailValue}>{selectedHistoryItem?.cashierName || '-'}</Text>
+            </View>
+            {selectedHistoryItem?.member && (
+              <View style={styles.historyDetailRow}>
+                <Text style={styles.historyDetailLabel}>Member</Text>
+                <Text style={styles.historyDetailValue}>{selectedHistoryItem?.member}</Text>
+              </View>
+            )}
+            {selectedHistoryItem?.type === 'EARN' && selectedHistoryItem?.pointsEarned > 0 && (
+              <View style={[styles.historyDetailRow, { borderBottomWidth: 0 }]}>
+                <Text style={styles.historyDetailLabel}>Poin Didapat</Text>
+                <Text style={[styles.historyDetailValue, { color: DESIGN.successGreen }]}>+{selectedHistoryItem?.pointsEarned} pts</Text>
+              </View>
+            )}
+          </View>
+        </View>
       </PopModal>
 
       <PopModal visible={scannedVoucher !== null} onClose={() => setScannedVoucher(null)}>
@@ -1288,13 +1451,13 @@ const styles = StyleSheet.create({
   floatingModalWrapper: { ...StyleSheet.absoluteFillObject },
   floatingModalCard: { backgroundColor: DESIGN.surface, shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.3, shadowRadius: 40, elevation: 30 },
   floatingModalClipView: { overflow: 'hidden', flex: 1 },
-  floatingModalHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 22, paddingBottom: 18 },
-  floatingModalIconBox: { width: 46, height: 46, borderRadius: 15, justifyContent: 'center', alignItems: 'center' },
-  floatingModalTitle: { fontSize: 18, fontWeight: '800', color: DESIGN.textPrimary, letterSpacing: -0.4 },
-  floatingModalSub: { fontSize: 13, fontWeight: '500', color: DESIGN.textSecondary, marginTop: 2 },
-  floatingModalCloseBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: DESIGN.canvas, justifyContent: 'center', alignItems: 'center' },
+  floatingModalHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 18, paddingBottom: 14 },
+  floatingModalIconBox: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  floatingModalTitle: { fontSize: 17, fontWeight: '800', color: DESIGN.textPrimary, letterSpacing: -0.4 },
+  floatingModalSub: { fontSize: 12, fontWeight: '500', color: DESIGN.textSecondary, marginTop: 1 },
+  floatingModalCloseBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: DESIGN.canvas, justifyContent: 'center', alignItems: 'center' },
   floatingModalDivider: { height: 1, backgroundColor: DESIGN.canvas },
-  floatingModalBody: { paddingHorizontal: 20, paddingTop: 20 },
+  floatingModalBody: { paddingHorizontal: 20, paddingTop: 16 },
   datePickerOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: DESIGN.surface, zIndex: 1000, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 20 },
 
   // --- GLANCE STYLES (half stage) ---
@@ -1309,10 +1472,10 @@ const styles = StyleSheet.create({
   glancePromoCount: { fontSize: 15, fontWeight: '600', color: DESIGN.textSecondary },
   sheetHeaderContent: { flexDirection: 'row', alignItems: 'center' },
   actionBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: DESIGN.canvas, justifyContent: 'center', alignItems: 'center', marginLeft: 16 },
-  kpiRow: { flexDirection: 'row', gap: 16, marginBottom: 24 },
-  kpiBox: { flex: 1, backgroundColor: DESIGN.canvas, padding: 16, borderRadius: 20 },
-  kpiLabel: { fontSize: 13, fontWeight: '600', color: DESIGN.textSecondary, marginBottom: 4 },
-  kpiValue: { fontSize: 22, fontWeight: '800', color: DESIGN.textPrimary },
+  kpiRow: { flexDirection: 'row', gap: 10, marginBottom: 18 },
+  kpiBox: { flex: 1, backgroundColor: DESIGN.canvas, padding: 14, borderRadius: 16 },
+  kpiLabel: { fontSize: 11, fontWeight: '600', color: DESIGN.textSecondary, marginBottom: 3, letterSpacing: 0.2 },
+  kpiValue: { fontSize: 19, fontWeight: '800', color: DESIGN.textPrimary, letterSpacing: -0.3 },
   sectionTitle: { fontSize: 16, fontWeight: '800', color: DESIGN.textPrimary, marginBottom: 16, marginTop: 8 },
   seeMoreText: { textAlign: 'center', color: DESIGN.textSecondary, fontSize: 14, fontWeight: '600', marginVertical: 16, fontStyle: 'italic' },
   sheetIconBoxRed: { width: 56, height: 56, borderRadius: 16, backgroundColor: 'rgba(211, 35, 42, 0.1)', justifyContent: 'center', alignItems: 'center', marginRight: 20 },
@@ -1321,17 +1484,22 @@ const styles = StyleSheet.create({
   sheetIconBoxLight: { width: 56, height: 56, borderRadius: 16, backgroundColor: DESIGN.canvas, justifyContent: 'center', alignItems: 'center', marginRight: 20 },
   sheetTitle: { fontSize: 24, fontWeight: '800', color: DESIGN.textPrimary, letterSpacing: -0.5, marginBottom: 4 },
   sheetSub: { fontSize: 15, color: DESIGN.textSecondary },
-  memberListItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: DESIGN.canvas },
-  memberAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: DESIGN.surfaceDark, justifyContent: 'center', alignItems: 'center' },
-  memberName: { fontSize: 16, fontWeight: '700', color: DESIGN.textPrimary },
-  memberTime: { fontSize: 13, fontWeight: '500', color: DESIGN.textSecondary, marginTop: 2 },
-  tierStatRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  tierBarContainer: { flex: 1, height: 10, backgroundColor: DESIGN.canvas, borderRadius: 5, overflow: 'hidden', marginRight: 12 },
-  tierBar: { height: '100%', borderRadius: 5 },
-  tierStatText: { fontSize: 14, fontWeight: '700', color: DESIGN.textPrimary, width: 80 },
-  promoCardModal: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: DESIGN.canvas, borderRadius: 16, padding: 16, marginBottom: 12 },
-  promoTitle: { fontSize: 16, fontWeight: '700', color: DESIGN.textPrimary, marginBottom: 4 },
-  promoCount: { fontSize: 13, fontWeight: '600', color: DESIGN.textSecondary },
+  memberListItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: DESIGN.canvas },
+  memberAvatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: DESIGN.surfaceDark, justifyContent: 'center', alignItems: 'center' },
+  memberName: { fontSize: 14, fontWeight: '600', color: DESIGN.textPrimary },
+  memberTime: { fontSize: 12, fontWeight: '500', color: DESIGN.textSecondary, marginTop: 1 },
+  memberTimeBadge: { fontSize: 12, fontWeight: '600', color: DESIGN.textSecondary },
+  tierStatRow: { flexDirection: 'column' },
+  tierBarContainer: { height: 6, backgroundColor: DESIGN.canvas, borderRadius: 3, overflow: 'hidden' },
+  tierBar: { height: '100%', borderRadius: 3 },
+  tierStatText: { fontSize: 13, fontWeight: '600', color: DESIGN.textPrimary },
+  tierStatLabel: { fontSize: 13, fontWeight: '700', color: DESIGN.textPrimary },
+  tierStatCount: { fontSize: 12, fontWeight: '500', color: DESIGN.textSecondary },
+  promoCardModal: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: DESIGN.canvas, borderRadius: 14, padding: 14, marginBottom: 10 },
+  promoTitle: { fontSize: 14, fontWeight: '700', color: DESIGN.textPrimary, marginBottom: 2 },
+  promoCount: { fontSize: 12, fontWeight: '500', color: DESIGN.textSecondary },
+  promoCountBadge: { minWidth: 28, height: 28, borderRadius: 14, backgroundColor: DESIGN.surface, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 8 },
+  promoCountBadgeText: { fontSize: 13, fontWeight: '800', color: DESIGN.textPrimary },
   
   // --- DATE PICKER STYLES ---
   filterBarContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 10 },
@@ -1343,7 +1511,7 @@ const styles = StyleSheet.create({
   // --- LINE CHART STYLES ---
   sheetScrollBody: { paddingHorizontal: 24, paddingTop: 24 },
   chartContainer: { alignItems: 'center', justifyContent: 'center', width: '100%', marginBottom: 12 },
-  dummyChartBox: { backgroundColor: DESIGN.canvas, borderRadius: 24, padding: 20, marginBottom: 24, position: 'relative' },
+  dummyChartBox: { backgroundColor: DESIGN.canvas, borderRadius: 20, padding: 16, marginBottom: 16, position: 'relative', overflow: 'hidden' },
   chartXAxis: { flexDirection: 'row', width: '100%', position: 'relative', height: 20 },
   chartHourText: { fontSize: 10, color: DESIGN.textSecondary, fontWeight: '700' },
 
@@ -1412,7 +1580,20 @@ const styles = StyleSheet.create({
   modalFullBtn: { width: '100%', height: 52, borderRadius: 16, backgroundColor: DESIGN.canvas, justifyContent: 'center', alignItems: 'center' },
   modalFullBtnText: { fontSize: 15, fontWeight: '700', color: DESIGN.textSecondary },
 
-  historyDetailRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: DESIGN.canvas },
-  historyDetailLabel: { fontSize: 14, fontWeight: '600', color: DESIGN.textSecondary },
-  historyDetailValue: { fontSize: 15, fontWeight: '800', color: DESIGN.textPrimary, textAlign: 'right', flex: 1, marginLeft: 16 },
+  historyDetailRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: DESIGN.canvas },
+  historyDetailLabel: { fontSize: 13, fontWeight: '500', color: DESIGN.textSecondary },
+  historyDetailValue: { fontSize: 13, fontWeight: '700', color: DESIGN.textPrimary, textAlign: 'right', flex: 1, marginLeft: 16 },
+
+  // --- HISTORY DETAIL CARD (Apple-style bottom sheet modal) ---
+  historyDetailCard: { width: '100%', backgroundColor: DESIGN.surface, borderRadius: 28, paddingTop: 12, paddingHorizontal: 20, paddingBottom: 28, shadowColor: '#000', shadowOffset: {width: 0, height: 20}, shadowOpacity: 0.25, shadowRadius: 30, elevation: 15 },
+  historyDetailPill: { width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(0,0,0,0.1)', alignSelf: 'center', marginBottom: 16 },
+  historyDetailHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  historyDetailIconBox: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  historyDetailTitle: { fontSize: 15, fontWeight: '800', color: DESIGN.textPrimary, letterSpacing: -0.2 },
+  historyDetailDate: { fontSize: 11, fontWeight: '500', color: DESIGN.textSecondary, marginTop: 2 },
+  historyDetailClose: { width: 30, height: 30, borderRadius: 15, backgroundColor: DESIGN.canvas, justifyContent: 'center', alignItems: 'center' },
+  historyDetailAmountBox: { backgroundColor: DESIGN.canvas, borderRadius: 16, padding: 14, marginBottom: 14 },
+  historyDetailAmountLabel: { fontSize: 10, fontWeight: '700', color: DESIGN.textSecondary, letterSpacing: 0.8, marginBottom: 4 },
+  historyDetailAmount: { fontSize: 26, fontWeight: '900', color: DESIGN.textPrimary, letterSpacing: -0.5 },
+  historyDetailRows: { marginTop: 2 },
 });
