@@ -721,10 +721,11 @@ export default function CashierDashboard() {
   const renderModalContent = () => {
     if (!activeModal) return null;
 
-    const totalTiers = Math.max(1, dailyStats.memberVisits);
-    const goldP = Math.round((dailyStats.tiers.gold / totalTiers) * 100);
-    const silverP = Math.round((dailyStats.tiers.silver / totalTiers) * 100);
-    const platP = 100 - goldP - silverP;
+    const totalTierCount = dailyStats.tiers.gold + dailyStats.tiers.silver + dailyStats.tiers.platinum;
+    const totalTiers = Math.max(1, totalTierCount);
+    const goldP = totalTiers > 0 ? Math.round((dailyStats.tiers.gold / totalTiers) * 100) : 0;
+    const silverP = totalTiers > 0 ? Math.round((dailyStats.tiers.silver / totalTiers) * 100) : 0;
+    const platP = totalTiers > 0 ? Math.round((dailyStats.tiers.platinum / totalTiers) * 100) : 0;
 
     const accentColor = activeModal === 'REVENUE' ? DESIGN.brandRed : activeModal === 'MEMBERS' ? '#5E6AD2' : activeModal === 'TIERS' ? DESIGN.gold : '#FF9F0A';
     const modalTitle = activeModal === 'REVENUE' ? 'Revenue' : activeModal === 'MEMBERS' ? 'Member Visits' : activeModal === 'TIERS' ? 'Tier Distribution' : 'Top Promos';
