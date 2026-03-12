@@ -1,19 +1,12 @@
 import {onDocumentCreated} from "firebase-functions/v2/firestore";
 import * as admin from "firebase-admin";
-import {FieldValue, Timestamp} from "firebase-admin/firestore";
+import {getFirestore, FieldValue, Timestamp} from "firebase-admin/firestore";
 
-import path from "path";
-import fs from "fs";
+admin.initializeApp();
+const db = getFirestore(
+  "gongcha-ver001"
+);// ✅ correct way to use named database
 
-const serviceAccountPath = path.join(__dirname, "../serviceAccountKey.json");
-const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, "utf8"));
-
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-});
-const db = admin.firestore();
-
-// Definisi Interface untuk menghindari penggunaan 'any'
 interface DailyStatUpdate {
   date: string;
   type: "STORE";
@@ -25,7 +18,11 @@ interface DailyStatUpdate {
 }
 
 export const aggregateDailyStats = onDocumentCreated(
-  "gongcha-ver001/transactions/{transactionId}",
+  {
+    document: "transactions/{transactionId}",
+    database: "gongcha-ver001",
+    region: "asia-southeast2",
+  },
   async (event) => {
     const snapshot = event.data;
     if (!snapshot) return;
@@ -40,7 +37,6 @@ export const aggregateDailyStats = onDocumentCreated(
     const statId = `${dateStr}-${trxData.storeId}`;
     const statRef = db.collection("daily_stats").doc(statId);
 
-    // Gunakan interface DailyStatUpdate alih-alih 'any'
     const updates: DailyStatUpdate = {
       date: dateStr,
       type: "STORE",
@@ -63,5 +59,5 @@ export const aggregateDailyStats = onDocumentCreated(
     } catch (error) {
       console.error("[ERROR] Failed to update daily_stats:", error);
     }
-  }
+  },
 );
