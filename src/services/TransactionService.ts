@@ -2,7 +2,6 @@ import {
   doc, 
   setDoc, 
   updateDoc, 
-  getDoc,
   collection,
   query,
   where,
@@ -13,12 +12,12 @@ import {
   arrayUnion
 } from 'firebase/firestore';
 import { firestoreDb } from '../config/firebase';
-import { TransactionRecord, XpRecord, UserProfile } from '../types/types';
+import { TransactionRecord, XpRecord } from '../types/types';
 
 export const TransactionService = {
   /**
    * MENCATAT TRANSAKSI (POV KASIR)
-   * Mengisi sub-koleksi: stores/{storeId}/transactions/{SmartID}
+   * Menulis langsung ke root collection 'transactions' agar terbaca di Admin Panel
    */
   async recordTransactionClaim(data: {
     transactionId: string,
@@ -26,43 +25,43 @@ export const TransactionService = {
     memberId: string,
     memberName: string,
     staffId: string,
-    storeLocations: string[]
+    storeLocation: string // Menerima single string
   }) {
     try {
       const now = new Date();
       const datePart = now.toISOString().split('T')[0].replace(/-/g, '');
       const smartId = `${datePart}-${data.transactionId}`;
 
-      // 1. Path Sub-koleksi Store
-      const trxDocRef = doc(firestoreDb, "stores", data.storeLocations[0], "transactions", smartId);
+      // 1. Path Koleksi Global Transactions
+      const trxDocRef = doc(firestoreDb, "transactions", smartId);
 
       const trxPayload: TransactionRecord = {
         transactionId: data.transactionId,
         amount: data.amount,
-        potentialPoints: Math.floor(data.amount / 100),
+        potentialPoints: Math.floor(data.amount / 100), // Asumsi rasio poin
         memberId: data.memberId,
         memberName: data.memberName,
         staffId: data.staffId,
-        storeLocations: data.storeLocations,
-        status: 'pending',
+        storeLocation: data.storeLocation,
+        status: 'pending', // Huruf kecil mutlak
+        type: 'earn',      // Huruf kecil mutlak
         createdAt: serverTimestamp(),
       };
 
-      // 2. Data Riwayat untuk User
+      // 2. Data Riwayat untuk Profil User
       const userHistoryItem: XpRecord = {
         id: smartId,
         date: now.toISOString(),
         amount: trxPayload.potentialPoints,
         type: 'earn',
-        status: 'pending',
-        context: `Purchase at ${data.storeLocations[0]}`,
-        location: data.storeLocations[0],
+        context: `Purchase at ${data.storeLocation}`,
+        location: data.storeLocation,
         transactionId: data.transactionId
       };
 
       const userDocRef = doc(firestoreDb, 'users', data.memberId);
 
-      // 3. Eksekusi Simpan (Double Write)
+      // 3. Eksekusi Simpan Global
       await Promise.all([
         setDoc(trxDocRef, trxPayload),
         updateDoc(userDocRef, {
@@ -77,11 +76,13 @@ export const TransactionService = {
     }
   },
 
-  async getStoreHistory(storeId: string) {
+  // Mengambil histori dari root collection khusus toko tertentu
+  async getStoreHistory(storeLocation: string) {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
     const q = query(
-      collection(firestoreDb, "stores", storeId, "transactions"),
+      collection(firestoreDb, "transactions"),
+      where("storeLocation", "==", storeLocation),
       where("createdAt", ">=", Timestamp.fromDate(startOfDay)),
       orderBy("createdAt", "desc")
     );

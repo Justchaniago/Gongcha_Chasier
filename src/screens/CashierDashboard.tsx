@@ -371,15 +371,9 @@ export default function CashierDashboard() {
   // 1. FETCH MURNI DARI FIREBASE 
   useEffect(() => {
     if (!staff) return;
-    const storeId = Array.isArray(staff?.storeLocations) ? staff.storeLocations[0] : staff?.storeLocation;
-    if (!storeId || storeId === 'Unknown Location') { setStoreName('Unknown Store'); return; }
-    
-    getDoc(doc(firestoreDb, 'stores', storeId)).then(docSnap => {
-       if(docSnap.exists()) setStoreName(docSnap.data().namePlace || docSnap.data().name || 'Unknown Store');
-       else setStoreName(storeId);
-    });
+    setStoreName(staff.name || 'Unknown Store');
 
-    const q = query(collection(firestoreDb, 'transactions'), where('storeId', '==', storeId));
+    const q = query(collection(firestoreDb, 'transactions'), where('storeId', '==', staff.assignedStoreId));
     const unsubscribe = onSnapshot(q, (snapshot) => {
        const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
        setRawTransactions(docs);
@@ -1168,7 +1162,7 @@ export default function CashierDashboard() {
             <Image source={require('../../assets/images/logo1.webp')} style={styles.headerLogo} resizeMode="contain" />
             <View style={styles.headerTextContainer}>
               <Text style={styles.eyebrow}>{getGreeting()}</Text>
-              <Text style={[styles.locationTitle, { fontSize: storeName.length > 20 ? 18 : 22 }]} numberOfLines={1} adjustsFontSizeToFit={true} minimumFontScale={0.7}>{storeName}</Text>
+              <Text style={[styles.locationTitle, { fontSize: (staff?.name || 'Staff').length > 20 ? 18 : 22 }]} numberOfLines={1} adjustsFontSizeToFit={true} minimumFontScale={0.7}>{staff?.name || 'Staff'}</Text>
             </View>
           </View>
           <View style={styles.headerRight}>

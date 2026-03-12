@@ -1,31 +1,29 @@
-# Fix All Problems - Progress Tracker
+# Update CashierDashboard.tsx - Use DB "name" field for displays
 
-## Phase 1: Firebase Configuration Consolidation
-- [x] Remove duplicate `lib/firebase.ts` file
-- [x] Update imports in `CashierDashboard.tsx` to use `src/config/firebase.ts`
+**Status:** Planning
 
-## Phase 2: Fix CashierDashboard.tsx Major Issues
-- [x] Complete the broken `ScannerOverlay` component
-- [x] Add the missing `MemberDetailPage` component
-- [x] Fix the incomplete `handleSyncDatabase` function
-- [x] Add proper TypeScript types
-- [x] Remove console.log statements
-- [x] Fix the `spin` variable reference
+**Information Gathered:**
+- File analyzed (user provided content).
+- Store name: `docSnap.data().namePlace || docSnap.data().name` → Change to `data.name` only.
+- Transactions: Save `cashierName: staff.name` (DB field), display `cashierName` → Change to `name`.
+- Member: `userData.name` from users DB (good).
+- History detail: Use `selectedHistoryItem?.name` instead of `cashierName`.
 
-## Phase 3: TypeScript Type Safety
-- [x] Fix `LoginScreen.tsx` - replace `any` type in error handling
-- [x] Fix `RewardsScreen.tsx` - replace `any` types
-- [x] Fix `StoreLocatorScreen.tsx` - replace `any` types
-- [x] Fix `HomeScreen.tsx` - replace `any` types
-- [x] Fix `ScannerScreen.tsx` - replace `any` types
+**Plan:**
+1. src/screens/CashierDashboard.tsx:
+   - Store fetch: Change `namePlace || name` to `name`.
+   - rawTransactions transformation: Use `name: data.name` instead of `cashierName: data.cashierName`.
+   - History detail modal: Display `name` instead of `cashierName`.
+2. src/store/useCashierStore.ts:
+   - Transaction save: `cashierName: staff.name` → `name: staff.name`.
 
-## Phase 4: Code Cleanup
-- [x] Remove console.log statements from `ThemeContext.tsx`
-- [x] Remove console.log statements from `CashierDashboard.tsx`
+**Dependent Files:**
+- src/screens/CashierDashboard.tsx
+- src/store/useCashierStore.ts
 
-## Phase 5: Complete Store Functions
-- [x] Complete the `syncData` function in `useCashierStore.ts`
+**Followup:**
+- Test displays after changes.
+- npx expo start --clear
 
-## Final Verification
-- [ ] Run TypeScript compilation check
-- [ ] Verify no runtime errors
+Approve plan to proceed with edits?
+

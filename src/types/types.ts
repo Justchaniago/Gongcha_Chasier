@@ -1,13 +1,13 @@
 export type MemberTier = 'Silver' | 'Gold' | 'Platinum';
 export type HistoryEventType = 'earn' | 'redeem';
 
-// --- NEW STAFF PROFILE ---
+// 🔥 REFACTOR: Sesuaikan dengan admin_users
 export interface StaffProfile {
-  id: string; // ID unik staff (biasanya dari UID Firebase Auth)
+  id: string; 
   name: string;
   email: string;
-  role: 'cashier' | 'store_manager';
-  storeLocations: string[];
+  role: 'cashier' | 'store_manager' | 'STAFF' | 'SUPER_ADMIN';
+  assignedStoreId: string | null; // Menggantikan storeLocations array
 }
 
 export interface XpRecord {
@@ -18,17 +18,15 @@ export interface XpRecord {
   context?: string;
   location?: string;
   tierEligible?: boolean;
+  transactionId?: string;
 }
 
 export interface UserProfile {
   id: string;
   name: string;
   phoneNumber: string;
-  
-  // --- UPDATED FIELDS ---
   email?: string; 
   photoURL?: string; 
-  
   currentPoints: number;
   lifetimePoints: number;
   tierXp: number;
@@ -36,26 +34,32 @@ export interface UserProfile {
   tier: MemberTier;
   joinedDate: string;
   vouchers: UserVoucher[];
-  
-  // --- UPDATED ROLE ---
   role?: 'master' | 'trial' | 'admin' | 'member'; 
 }
 
-export interface Transaction {
-  id: string;
-  date: string;
+// 🔥 REFACTOR: Standarisasi properti transaksi
+export interface TransactionRecord {
+  id?: string;
+  transactionId: string;
   amount: number;
-  pointsEarned: number;
-  items: string[];
+  potentialPoints: number;
+  memberId: string | null;
+  memberName: string | null;
+  staffId: string;
+  storeLocation: string;
+  status: 'pending' | 'verified' | 'rejected';
+  type: 'earn' | 'redeem';
+  createdAt: any;
 }
 
+// 🔥 REFACTOR: Standarisasi dengan skema rewards_catalog
 export interface RewardItem {
   id: string;
   title: string;
   description: string;
-  pointsCost: number;
-  image: any;
-  category: 'Drink' | 'Topping' | 'Discount';
+  pointsrequired: number; // Huruf kecil semua sesuai The God Schema
+  imageUrl: string;       // U besar sesuai The God Schema
+  isActive: boolean;
 }
 
 export interface UserVoucher {

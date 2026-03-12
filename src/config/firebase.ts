@@ -1,30 +1,30 @@
+// src/config/firebase.ts
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
-
-// 🔥 FIX FIREBASE v12 ERROR: Bypass TypeScript Linter
 import { initializeAuth } from "firebase/auth";
-// @ts-ignore: getReactNativePersistence exists in the RN bundle but missing from TS definitions
-import { getReactNativePersistence } from "firebase/auth";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Konfigurasi aslimu
+// @ts-ignore - Bypass TS Error: TypeScript gagal membaca export, tapi Metro Bundler bisa mengeksekusinya di runtime.
+import { getReactNativePersistence } from "firebase/auth";
+
+// Konfigurasi mengarah ke Project ID yang benar
 const firebaseConfig = {
   apiKey: "AIzaSyCeSYZdPgERBcf0aKgd0F7wcATkfRt6_iY",
   authDomain: "gongcha-app-4691f.firebaseapp.com",
   projectId: "gongcha-app-4691f",
   storageBucket: "gongcha-app-4691f.firebasestorage.app",
   messagingSenderId: "808600152798",
-  appId: "1:808600152798:web:323ec9a9ae5929cf27b04f",
-  measurementId: "G-LVJRJZW2E6"
+  appId: "1:808600152798:web:e3077ed59649703727b04f"
 };
 
-// Initialize Firebase App
+// 1. Inisialisasi Firebase App
 export const firebaseApp = initializeApp(firebaseConfig);
 
-// 🔥 THE MAGIC: Mengawinkan Firebase Auth dengan Storage HP
+// 2. Inisialisasi Auth dengan AsyncStorage (Mobile friendly & persistent login)
 export const firebaseAuth = initializeAuth(firebaseApp, {
   persistence: getReactNativePersistence(AsyncStorage)
 });
 
-// Initialize Firestore
-export const firestoreDb = getFirestore(firebaseApp);
+// 3. Inisialisasi Firestore Database
+// Mengarahkan langsung ke named database "gongcha-ver001" agar tidak mencari "(default)"
+export const firestoreDb = getFirestore(firebaseApp, "gongcha-ver001");
