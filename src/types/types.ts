@@ -1,73 +1,109 @@
-export type MemberTier = 'Silver' | 'Gold' | 'Platinum';
-export type HistoryEventType = 'earn' | 'redeem';
+// src/types/types.ts
 
-// 🔥 REFACTOR: Sesuaikan dengan admin_users
+// ============================================================================
+// 1. ADMIN & STAFF ROLES
+// ============================================================================
+export type AdminRole = "SUPER_ADMIN" | "STAFF" | "admin" | "master" | "manager";
+
+// Representasi dari collection 'admin_users' / 'Staff' di Web Panel
 export interface StaffProfile {
-  id: string; 
+  uid: string; // Aligned dengan web panel (sebelumnya id)
   name: string;
   email: string;
-  role: 'cashier' | 'store_manager' | 'STAFF' | 'SUPER_ADMIN';
-  assignedStoreId: string | null; // Menggantikan storeLocations array
+  role: AdminRole;
+  assignedStoreId: string | null;
+  isActive?: boolean;
 }
 
-export interface XpRecord {
+// ============================================================================
+// 2. USERS (Customer)
+// ============================================================================
+export type UserTier = "BRONZE" | "SILVER" | "GOLD" | "Silver" | "Gold" | "Platinum";
+export type VoucherType = "personal" | "catalog";
+
+export interface UserVoucher {
   id: string;
-  date: string;
-  amount: number;
-  type?: HistoryEventType;
-  context?: string;
-  location?: string;
-  tierEligible?: boolean;
-  transactionId?: string;
+  code: string;
+  title: string;
+  rewardId?: string;
+  expiresAt?: string;
+  expiry?: any; // Mengakomodasi Timestamp web panel
+  isUsed?: boolean;
+  type?: VoucherType;
 }
 
 export interface UserProfile {
-  id: string;
+  uid: string; // Aligned dengan web panel (sebelumnya id)
   name: string;
-  phoneNumber: string;
+  phone?: string;
+  phoneNumber?: string;
   email?: string; 
   photoURL?: string; 
-  currentPoints: number;
-  lifetimePoints: number;
-  tierXp: number;
-  xpHistory: XpRecord[];
-  tier: MemberTier;
-  joinedDate: string;
-  vouchers: UserVoucher[];
-  role?: 'master' | 'trial' | 'admin' | 'member'; 
+  points?: number;
+  currentPoints?: number;
+  lifetimePoints?: number;
+  tierXp?: number;
+  xp?: number;
+  tier: UserTier;
+  joinedDate?: string;
+  vouchers?: UserVoucher[]; 
+  activeVouchers?: UserVoucher[];
+  role?: string; 
+  // xpHistory dihapus di Kasir demi efisiensi read/write (Menghindari BOM Waktu dokumen 1MB)
 }
 
-// 🔥 REFACTOR: Standarisasi properti transaksi
+// ============================================================================
+// 3. TRANSACTIONS
+// ============================================================================
+export type TransactionStatus = "PENDING" | "COMPLETED" | "CANCELLED" | "REFUNDED" | "pending" | "verified" | "rejected";
+export type TransactionType = "earn" | "redeem";
+
 export interface TransactionRecord {
   id?: string;
-  transactionId: string;
-  amount: number;
-  potentialPoints: number;
-  memberId: string | null;
-  memberName: string | null;
-  staffId: string;
-  storeLocation: string;
-  status: 'pending' | 'verified' | 'rejected';
-  type: 'earn' | 'redeem';
-  createdAt: any;
+  receiptNumber: string;  // Aligned dengan web panel (sebelumnya transactionId)
+  storeId: string;        // Wajib ada mengikuti web panel
+  storeName: string;      // Aligned dengan web panel (sebelumnya storeLocation)
+  userId: string | null;  // Aligned dengan web panel
+  totalAmount: number;    // Aligned dengan web panel (sebelumnya amount)
+  status: TransactionStatus;
+  createdAt: any;         // Menggunakan any agar kompatibel dengan serverTimestamp() client SDK
+  
+  // Additional loyalty fields (aligned dengan web panel)
+  memberId?: string;      
+  memberName?: string;    
+  staffId?: string;       
+  potentialPoints?: number;
+  type?: TransactionType;
+  verifiedAt?: any;
+  verifiedBy?: string;
+  
+  // Custom metadata untuk keperluan riwayat kasir lokal
+  voucherCode?: string; 
+  voucherTitle?: string; 
 }
 
-// 🔥 REFACTOR: Standarisasi dengan skema rewards_catalog
+// ============================================================================
+// 4. REWARDS (MARKETING)
+// ============================================================================
 export interface RewardItem {
   id: string;
   title: string;
   description: string;
-  pointsrequired: number; // Huruf kecil semua sesuai The God Schema
-  imageUrl: string;       // U besar sesuai The God Schema
+  pointsrequired: number;
+  imageUrl: string;
   isActive: boolean;
 }
 
-export interface UserVoucher {
-  id: string;
-  rewardId: string;
-  title: string;
-  code: string;
-  redeemedAt: string;
-  expiresAt: string;
-  isUsed: boolean;
+// ============================================================================
+// 5. DAILY STATS (The God Document)
+// ============================================================================
+export interface DailyStat {
+  id?: string;
+  date: string;
+  type: "GLOBAL" | "STORE";
+  storeId: string;
+  totalRevenue: number;
+  totalTransactions: number;
+  visitedMemberIds?: string[]; // Menyimpan UID member unik
+  updatedAt: any;
 }
