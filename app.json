@@ -4,7 +4,7 @@
     "slug": "gongcha-cashier",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/images/logoandroid.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
@@ -14,7 +14,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.gongcha.cashier",
+      "bundleIdentifier": "com.gongcha.cashierapp",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "We use your location to show the nearest Gong Cha stores.",
         "LSApplicationQueriesSchemes": [
@@ -32,10 +32,10 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/images/logoandroid.png",
         "backgroundColor": "#FFF8F0"
       },
-      "package": "com.gongcha.cashier",
+      "package": "com.gongcha.cashierapp",
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
@@ -54,8 +54,9 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "515f67da-7d2b-4687-a289-f41af5c21909"
+        "projectId": "8fd8824d-878e-499d-bdb3-646dd32d840f"
       }
-    }
+    },
+    "owner": "justchaniago"
   }
 }

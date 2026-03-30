@@ -1,17 +1,17 @@
 // App.tsx
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Image, StyleSheet, View, ActivityIndicator } from 'react-native';
+import { Animated, Easing, Image, StyleSheet, View, ActivityIndicator, Platform, InteractionManager } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
 // 🔥 IMPORT LAYAR BARU & ZUSTAND
-import { preloadAppAssets } from './src/utils/preloadAppAssets';
+import { preloadCriticalAssets, warmSecondaryAssets } from './src/utils/preloadAppAssets';
 import { useCashierStore } from './src/store/useCashierStore';
 import LoginScreen from './src/screens/LoginScreen';
 import CashierDashboard from './src/screens/CashierDashboard';
 
-const MIN_SPLASH_MS = 500;
-const MAX_PRELOAD_WAIT_MS = 700;
+const MIN_SPLASH_MS = 350;
+const MAX_PRELOAD_WAIT_MS = 300;
 
 export default function App() {
   const [showSplash, setShowSplash] = useState(true);
@@ -25,6 +25,14 @@ export default function App() {
   useEffect(() => {
     // Jalankan listener Firebase saat aplikasi dibuka
     initializeAuth();
+  }, [initializeAuth]);
+
+  useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(() => {
+      warmSecondaryAssets().catch(() => {});
+    });
+
+    return () => task.cancel();
   }, []);
 
   // Animasi Splash Screen (Dibiarkan 100% utuh sesuai desainmu)
@@ -59,7 +67,7 @@ export default function App() {
     (async () => {
       try {
         await Promise.race([
-          preloadAppAssets(),
+          preloadCriticalAssets(),
           new Promise((resolve) => setTimeout(resolve, MAX_PRELOAD_WAIT_MS)),
         ]);
       } catch {} 
@@ -101,7 +109,11 @@ export default function App() {
   // 3. THE MAGIC GATE: Sudah Login? Masuk Dashboard Utama. Belum? Balik ke Layar Login.
   return (
     <SafeAreaProvider>
-      <StatusBar style="auto" />
+      <StatusBar
+        style="auto"
+        translucent={Platform.OS === 'android'}
+        backgroundColor="transparent"
+      />
       {isAuthenticated ? <CashierDashboard /> : <LoginScreen />}
     </SafeAreaProvider>
   );

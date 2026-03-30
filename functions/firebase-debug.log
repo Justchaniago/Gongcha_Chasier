@@ -1,0 +1,77 @@
+[debug] [2026-03-20T14:05:30.483Z] ----------------------------------------------------------------------
+[debug] [2026-03-20T14:05:30.494Z] Command:       /opt/homebrew/Cellar/node/25.2.1/bin/node /opt/homebrew/bin/firebase functions:shell
+[debug] [2026-03-20T14:05:30.494Z] CLI Version:   15.9.0
+[debug] [2026-03-20T14:05:30.494Z] Platform:      darwin
+[debug] [2026-03-20T14:05:30.494Z] Node Version:  v25.2.1
+[debug] [2026-03-20T14:05:30.494Z] Time:          Fri Mar 20 2026 21:05:30 GMT+0700 (Western Indonesia Time)
+[debug] [2026-03-20T14:05:30.494Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-03-20T14:05:30.497Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2026-03-20T14:05:35.640Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-03-20T14:05:35.641Z] > authorizing via signed-in user (ferryruslyc@gmail.com)
+[debug] [2026-03-20T14:05:35.641Z] [iam] checking project gongcha-app-4691f for permissions ["firebase.projects.get"]
+[debug] [2026-03-20T14:05:35.643Z] Checked if tokens are valid: false, expires at: 1773345032966
+[debug] [2026-03-20T14:05:35.643Z] Checked if tokens are valid: false, expires at: 1773345032966
+[debug] [2026-03-20T14:05:35.643Z] > refreshing access token with scopes: []
+[debug] [2026-03-20T14:05:35.644Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-03-20T14:05:35.644Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-03-20T14:05:36.132Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-03-20T14:05:36.132Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-03-20T14:05:36.149Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/gongcha-app-4691f:testIamPermissions [none]
+[debug] [2026-03-20T14:05:36.149Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/gongcha-app-4691f:testIamPermissions  x-goog-user-project=gongcha-app-4691f
+[debug] [2026-03-20T14:05:36.149Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/gongcha-app-4691f:testIamPermissions {"permissions":["firebase.projects.get"]}
+[debug] [2026-03-20T14:05:36.394Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2026-03-20T14:05:36.394Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}
+[debug] [2026-03-20T14:05:36.723Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/gongcha-app-4691f:testIamPermissions 200
+[debug] [2026-03-20T14:05:36.724Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/gongcha-app-4691f:testIamPermissions {"permissions":["firebase.projects.get"]}
+[warn] ⚠  functions: Functions Emulator unable to start on port 5000, starting on 5001 instead. {"metadata":{"emulator":{"name":"functions"},"message":"Functions Emulator unable to start on port 5000, starting on 5001 instead."}}
+[debug] [2026-03-20T14:05:37.153Z] [functions] Functions Emulator only supports listening on one address (127.0.0.1). Not listening on ::1
+[debug] [2026-03-20T14:05:37.238Z] defaultcredentials: writing to file /Users/f/.config/firebase/ferryruslyc_gmail_com_application_default_credentials.json
+[debug] [2026-03-20T14:05:37.240Z] DEBUG: Setting GAC to /Users/f/.config/firebase/ferryruslyc_gmail_com_application_default_credentials.json
+[debug] [2026-03-20T14:05:37.240Z] Checked if tokens are valid: true, expires at: 1774019135132
+[debug] [2026-03-20T14:05:37.240Z] Checked if tokens are valid: true, expires at: 1774019135132
+[debug] [2026-03-20T14:05:37.240Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/gongcha-app-4691f/adminSdkConfig [none]
+[debug] [2026-03-20T14:05:38.375Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/gongcha-app-4691f/adminSdkConfig 200
+[debug] [2026-03-20T14:05:38.375Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/gongcha-app-4691f/adminSdkConfig {"projectId":"gongcha-app-4691f","storageBucket":"gongcha-app-4691f.firebasestorage.app"}
+[debug] [2026-03-20T14:05:38.394Z] [functions] Watching "/Users/f/gongcha_cashierapp/functions" for Cloud Functions...
+[debug] [2026-03-20T14:05:38.399Z] Validating nodejs source
+[warn] ⚠  functions: package.json indicates an outdated version of firebase-functions. Please upgrade using npm install --save firebase-functions@latest in your functions directory. 
+[debug] [2026-03-20T14:05:41.586Z] > [functions] package.json contents: {
+  "name": "functions",
+  "scripts": {
+    "lint": "eslint --ext .js,.ts .",
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "serve": "npm run build && firebase emulators:start --only functions",
+    "shell": "npm run build && firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "engines": {
+    "node": "24"
+  },
+  "main": "lib/index.js",
+  "dependencies": {
+    "firebase-admin": "^13.6.0",
+    "firebase-functions": "^7.0.0"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^5.12.0",
+    "@typescript-eslint/parser": "^5.12.0",
+    "eslint": "^8.9.0",
+    "eslint-config-google": "^0.14.0",
+    "eslint-plugin-import": "^2.25.4",
+    "firebase-functions-test": "^3.4.1",
+    "typescript": "^5.7.3"
+  },
+  "private": true
+}
+[debug] [2026-03-20T14:05:41.587Z] Building nodejs source
+[debug] [2026-03-20T14:05:41.608Z] Failed to find version of module node: reached end of search path /Users/f/gongcha_cashierapp/functions/node_modules
+[warn] ⚠  functions: Your requested "node" version "24" doesn't match your global version "25". Using node@25 from host. 
+[debug] [2026-03-20T14:05:41.615Z] Could not find functions.yaml. Must use http discovery
+[debug] [2026-03-20T14:05:41.679Z] Found firebase-functions binary at '/Users/f/gongcha_cashierapp/functions/node_modules/.bin/firebase-functions'
+[info] Serving at port 8719
+
+[debug] [2026-03-20T14:05:42.863Z] Got response from /__/functions.yaml {"endpoints":{"aggregateDailyStats":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","region":["asia-southeast2"],"labels":{},"eventTrigger":{"eventType":"google.cloud.firestore.document.v1.created","eventFilters":{"database":"gongcha-ver001","namespace":"(default)"},"eventFilterPathPatterns":{"document":"transactions/{transactionId}"},"retry":false},"entryPoint":"aggregateDailyStats"}},"specVersion":"v1alpha1","requiredAPIs":[],"extensions":{}}

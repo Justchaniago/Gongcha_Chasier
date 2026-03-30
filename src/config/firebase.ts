@@ -2,6 +2,7 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { initializeAuth } from "firebase/auth";
+import { getFunctions } from "firebase/functions";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // @ts-ignore - Bypass TS Error: TypeScript gagal membaca export, tapi Metro Bundler bisa mengeksekusinya di runtime.
@@ -28,3 +29,6 @@ export const firebaseAuth = initializeAuth(firebaseApp, {
 // 3. Inisialisasi Firestore Database
 // Mengarahkan langsung ke named database "gongcha-ver001" agar tidak mencari "(default)"
 export const firestoreDb = getFirestore(firebaseApp, "gongcha-ver001");
+
+// 4. Inisialisasi Callable Cloud Functions di region project
+export const firebaseFunctions = getFunctions(firebaseApp, "asia-southeast2");

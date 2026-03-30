@@ -1,10 +1,13 @@
 import { Asset } from 'expo-asset';
 import { Image } from 'react-native';
 
-const LOCAL_ASSETS = [
+const CRITICAL_LOCAL_ASSETS = [
   require('../../assets/images/logo1.webp'),
-  require('../../assets/images/logowhite.webp'),
   require('../../assets/images/welcome1.webp'),
+];
+
+const SECONDARY_LOCAL_ASSETS = [
+  require('../../assets/images/logowhite.webp'),
   require('../../assets/images/card1.webp'),
   require('../../assets/images/abstract1.webp'),
   require('../../assets/images/abstract2.webp'),
@@ -35,9 +38,24 @@ const REMOTE_MENU_IMAGES = [
   'https://via.placeholder.com/200/FF69B4/FFFFFF?text=Strawberry',
 ];
 
-export async function preloadAppAssets() {
-  await Promise.all([
-    Asset.loadAsync(LOCAL_ASSETS),
-    Promise.allSettled(REMOTE_MENU_IMAGES.map((url) => Image.prefetch(url))),
-  ]);
+let criticalAssetsPromise: Promise<void> | null = null;
+let secondaryAssetsPromise: Promise<void> | null = null;
+
+export function preloadCriticalAssets() {
+  if (!criticalAssetsPromise) {
+    criticalAssetsPromise = Asset.loadAsync(CRITICAL_LOCAL_ASSETS).then(() => undefined);
+  }
+
+  return criticalAssetsPromise;
+}
+
+export function warmSecondaryAssets() {
+  if (!secondaryAssetsPromise) {
+    secondaryAssetsPromise = Promise.allSettled([
+      Asset.loadAsync(SECONDARY_LOCAL_ASSETS),
+      Promise.allSettled(REMOTE_MENU_IMAGES.map((url) => Image.prefetch(url))),
+    ]).then(() => undefined);
+  }
+
+  return secondaryAssetsPromise;
 }

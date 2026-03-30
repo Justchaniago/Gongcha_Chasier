@@ -5,6 +5,7 @@
     "moduleResolution": "nodenext",
     "noImplicitReturns": true,
     "noUnusedLocals": true,
+    "noEmit": false,
     "outDir": "lib",
     "sourceMap": true,
     "strict": true,
@@ -12,6 +13,8 @@
   },
   "compileOnSave": true,
   "include": [
-    "src"
-  ]
+    "src",
+    "nativewind-env.d.ts"
+  ],
+  "extends": "expo/tsconfig.base"
 }

@@ -1,19 +1,19 @@
 // @ts-nocheck
 import React, { useState, useRef, useEffect } from 'react';
 import { 
-  View, Text, StyleSheet, Pressable, Platform, SafeAreaView, StatusBar, ScrollView, Dimensions,
+  View, Text, StyleSheet, Pressable, Platform, StatusBar, ScrollView, Dimensions,
   Image, Animated, Easing, NativeSyntheticEvent, NativeScrollEvent, TouchableWithoutFeedback,
   Modal, SectionList, ActivityIndicator, TextInput, KeyboardAvoidingView 
 } from 'react-native';
 import { QrCode, TrendingUp, Users, Ticket, Crown, X, ChevronRight, Activity, Calendar, Filter, ScanLine, ArrowLeft, Star, ShoppingBag, Banknote, Smartphone, Clock, CheckCircle2, MapPin, Store, RefreshCcw, LogOut, AlertCircle, ChevronLeft } from 'lucide-react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { BlurView } from 'expo-blur';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 // --- IMPORT ZUSTAND & FIREBASE ---
 import { useCashierStore } from '../store/useCashierStore';
-import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, getDocs, collection, query, where, onSnapshot } from 'firebase/firestore';
 import { firestoreDb } from '../config/firebase';
 
 const { width, height } = Dimensions.get('window');
@@ -37,6 +37,49 @@ type HistorySubTab = 'TRANSACTIONS' | 'REDEMPTIONS';
 type AlertType = 'success' | 'error' | 'info';
 
 const formatRupiah = (angka: number) => angka.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+
+const normalizeTransaction = (data: any) => {
+  const type = typeof data.type === 'string' ? data.type.toUpperCase() : '';
+  const memberUid = data.uid || data.memberId || data.userId || null;
+  const status = typeof data.status === 'string' ? data.status.toUpperCase() : '';
+  const pointsState =
+    typeof data.pointsState === 'string'
+      ? data.pointsState.toUpperCase()
+      : status === 'PENDING'
+        ? 'PENDING'
+        : memberUid && (data.pointsEarned ?? data.potentialPoints ?? 0) > 0
+          ? 'AVAILABLE'
+          : 'NONE';
+
+  return {
+    ...data,
+    type,
+    status,
+    uid: memberUid,
+    memberId: memberUid,
+    posTransactionId: data.posTransactionId || data.receiptNumber || data.id,
+    cashierName: data.cashierName || data.staffName || data.staffId || '-',
+    pointsEarned: data.pointsEarned ?? data.potentialPoints ?? 0,
+    pointsState,
+  };
+};
+
+const getMemberVouchers = (userData: any) => {
+  if (Array.isArray(userData?.vouchers) && userData.vouchers.length > 0) {
+    return userData.vouchers;
+  }
+
+  if (Array.isArray(userData?.activeVouchers) && userData.activeVouchers.length > 0) {
+    return userData.activeVouchers;
+  }
+
+  return Array.isArray(userData?.vouchers) ? userData.vouchers : Array.isArray(userData?.activeVouchers) ? userData.activeVouchers : [];
+};
+
+const isMemberLikeUser = (userData: any) => {
+  const role = typeof userData?.role === 'string' ? userData.role.toLowerCase() : '';
+  return !['admin', 'master', 'manager', 'staff', 'super_admin'].includes(role);
+};
 
 const SquishyBento = ({ onPress, style, children }: any) => {
   const scale = useRef(new Animated.Value(1)).current;
@@ -127,6 +170,7 @@ const MemberDetailPage = ({ visible, onClose, onShowAlert }: { visible: boolean,
 
   const storeState: any = useCashierStore();
   const activeMember = storeState.activeMember;
+  const staff = storeState.staff;
   const processTransaction = storeState.processTransaction;
   const setScannedVoucher = storeState.setScannedVoucher; 
 
@@ -135,6 +179,8 @@ const MemberDetailPage = ({ visible, onClose, onShowAlert }: { visible: boolean,
   const [posTrxId, setPosTrxId] = useState('');
   const [amountStr, setAmountStr] = useState('');
   const [isCharging, setIsCharging] = useState(false);
+  const [duplicateReceiptWarning, setDuplicateReceiptWarning] = useState('');
+  const [isCheckingDuplicateReceipt, setIsCheckingDuplicateReceipt] = useState(false);
   const [memberHistory, setMemberHistory] = useState<any[]>([]);
   const [selectedHistoryItem, setSelectedHistoryItem] = useState<any>(null);
 
@@ -146,28 +192,94 @@ const MemberDetailPage = ({ visible, onClose, onShowAlert }: { visible: boolean,
       fetchMemberHistory();
     } else {
       Animated.parallel([ Animated.spring(slideAnim, { toValue: width, friction: 10, tension: 65, useNativeDriver: true }), Animated.timing(bgOpacity, { toValue: 0, duration: 250, useNativeDriver: true }) ]).start();
-      setTrxModalVisible(false); setIsConfirming(false); setPosTrxId(''); setAmountStr(''); setMemberHistory([]); setSelectedHistoryItem(null);
+      setTrxModalVisible(false); setIsConfirming(false); setPosTrxId(''); setAmountStr(''); setDuplicateReceiptWarning(''); setMemberHistory([]); setSelectedHistoryItem(null);
     }
   }, [visible, activeMember?.uid]);
 
+  useEffect(() => {
+    if (duplicateReceiptWarning) {
+      setDuplicateReceiptWarning('');
+    }
+  }, [posTrxId]);
+
   const fetchMemberHistory = async () => {
-    if (!activeMember?.uid) return;
+    if (!activeMember?.uid || !staff?.assignedStoreId) return;
     try {
-      const q = query(collection(firestoreDb, 'transactions'), where('memberId', '==', activeMember.uid));
-      const snap = await getDocs(q);
-      const data: any[] = snap.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
+      const storeSnap = await getDocs(
+        query(
+          collection(firestoreDb, 'transactions'),
+          where('storeId', '==', staff.assignedStoreId)
+        )
+      );
+
+      const data = storeSnap.docs
+        .map((transactionDoc) =>
+          normalizeTransaction({ id: transactionDoc.id, ...(transactionDoc.data() as any) })
+        )
+        .filter((item: any) => {
+          const relatedUid = item.uid || item.userId || item.memberId;
+          return relatedUid === activeMember.uid;
+        });
+
       data.sort((a, b) => { const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0; const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0; return timeB - timeA; });
       setMemberHistory(data.slice(0, 10)); 
-    } catch (e) {}
+    } catch (e) {
+      console.error('Failed to fetch member history:', e);
+    }
   };
 
   const handleChargeSubmit = async () => {
     const amount = parseInt(amountStr.replace(/\D/g, ''), 10);
+    if (duplicateReceiptWarning) {
+      return;
+    }
+    if (!posTrxId.trim()) {
+      onShowAlert("Receipt / POS transaction ID wajib diisi.", "error");
+      return;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      onShowAlert("Total transaksi harus lebih dari 0.", "error");
+      return;
+    }
     setIsCharging(true);
     try {
       await processTransaction(amount, posTrxId.trim(), true); 
-      setTrxModalVisible(false); onClose(); onShowAlert(`Transaksi sukses! Pelanggan mendapat +${potentialPoints} Pts.`, 'success');
-    } catch (error) { onShowAlert("Gagal memproses transaksi. Periksa koneksi internet.", "error"); } finally { setIsCharging(false); }
+      const successMessage = potentialPoints > 0
+        ? `Transaksi terekam. +${potentialPoints} poin masuk ke pending dan menunggu verifikasi admin.`
+        : 'Transaksi terekam tanpa poin loyalty karena nominal belum memenuhi syarat.';
+      setTrxModalVisible(false); onClose(); onShowAlert(successMessage, 'success');
+    } catch (error: any) {
+      if (/sudah pernah diinput/i.test(error?.message || '')) {
+        setDuplicateReceiptWarning(error.message);
+        return;
+      }
+      onShowAlert(error?.message || "Gagal memproses transaksi. Periksa koneksi internet.", "error");
+    } finally { setIsCharging(false); }
+  };
+
+  const handleOpenTransactionConfirmation = async () => {
+    if (!posTrxId.trim()) return onShowAlert("Masukkan Receipt ID!", "error");
+    if (!amountStr) return onShowAlert("Masukkan Nominal!", "error");
+    if (!staff?.assignedStoreId) return onShowAlert("Store kasir tidak ditemukan.", "error");
+
+    setIsCheckingDuplicateReceipt(true);
+    try {
+      const hasDuplicateReceipt = await TransactionService.hasTodayReceipt(
+        staff.assignedStoreId,
+        posTrxId.trim()
+      );
+
+      setDuplicateReceiptWarning(
+        hasDuplicateReceipt
+          ? `Receipt ID ${posTrxId.trim()} sudah pernah dipakai hari ini. Gunakan ID transaksi yang berbeda.`
+          : ''
+      );
+      setIsConfirming(true);
+    } catch (error) {
+      onShowAlert("Gagal memverifikasi Receipt ID. Periksa koneksi internet.", "error");
+    } finally {
+      setIsCheckingDuplicateReceipt(false);
+    }
   };
 
   if (!activeMember) return null;
@@ -222,8 +334,22 @@ const MemberDetailPage = ({ visible, onClose, onShowAlert }: { visible: boolean,
                   <Text style={styles.historyDetails}>{item.createdAt?.toDate ? new Date(item.createdAt.toDate()).toLocaleDateString('id-ID', {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'}) : '-'} • {item.type}</Text>
                </View>
                <View style={styles.historyTotalBox}>
-                  {item.type === 'EARN' ? ( <><Text style={styles.historyTotalText}>Rp {formatRupiah(item.totalAmount || 0)}</Text><Text style={[styles.historyPointText, {marginTop: 4, color: DESIGN.successGreen, fontSize: 12}]}>+{item.pointsEarned || 0} Pts</Text></> ) : ( <Text style={[styles.historyTotalText, {color: DESIGN.brandRed, fontSize: 13}]}>REDEEMED</Text> )}
-               </View>
+                  {item.type === 'EARN' ? (
+                    <>
+                      <Text style={styles.historyTotalText}>Rp {formatRupiah(item.totalAmount || 0)}</Text>
+                      <Text style={[
+                        styles.historyPointText,
+                        {
+                          marginTop: 4,
+                          color: item.pointsState === 'PENDING' ? DESIGN.outstandingOrange : DESIGN.successGreen,
+                          fontSize: 12,
+                        },
+                      ]}>
+                        +{item.pointsEarned || 0} Pts{item.pointsState === 'PENDING' ? ' (Pending)' : ''}
+                      </Text>
+                    </>
+                  ) : ( <Text style={[styles.historyTotalText, {color: DESIGN.brandRed, fontSize: 13}]}>REDEEMED</Text> )}
+                </View>
             </Pressable>
         )) : ( <Text style={{color: DESIGN.textSecondary, fontStyle: 'italic', marginBottom: 24}}>Belum ada riwayat transaksi.</Text> )}
       </ScrollView>
@@ -273,8 +399,13 @@ const MemberDetailPage = ({ visible, onClose, onShowAlert }: { visible: boolean,
             </View>
             {selectedHistoryItem?.type === 'EARN' && selectedHistoryItem?.pointsEarned > 0 && (
               <View style={[styles.historyDetailRow, { borderBottomWidth: 0 }]}>
-                <Text style={styles.historyDetailLabel}>Poin Didapat</Text>
-                <Text style={[styles.historyDetailValue, { color: DESIGN.successGreen }]}>+{selectedHistoryItem?.pointsEarned} pts</Text>
+                <Text style={styles.historyDetailLabel}>Poin</Text>
+                <Text style={[
+                  styles.historyDetailValue,
+                  selectedHistoryItem?.pointsState === 'PENDING' ? { color: DESIGN.outstandingOrange } : { color: DESIGN.successGreen }
+                ]}>
+                  +{selectedHistoryItem?.pointsEarned} pts{selectedHistoryItem?.pointsState === 'PENDING' ? ' (pending)' : ''}
+                </Text>
               </View>
             )}
           </View>
@@ -288,9 +419,15 @@ const MemberDetailPage = ({ visible, onClose, onShowAlert }: { visible: boolean,
                   <AlertCircle size={48} color={DESIGN.outstandingOrange} style={{marginBottom: 16}} />
                   <Text style={styles.voucherModalTitle}>Konfirmasi Transaksi</Text>
                   <Text style={{textAlign: 'center', color: DESIGN.textSecondary, marginBottom: 24, fontSize: 14, lineHeight: 20}}>Pastikan data benar. Total: <Text style={{fontWeight: 'bold', color: DESIGN.textPrimary}}>Rp {amountStr}</Text>.{'\n'}Pelanggan akan mendapat <Text style={{fontWeight: 'bold', color: DESIGN.successGreen}}>+{potentialPoints} Poin</Text>.</Text>
+                  {duplicateReceiptWarning ? (
+                    <View style={styles.transactionWarningBox}>
+                      <AlertCircle size={18} color={DESIGN.outstandingOrange} style={{marginRight: 10, marginTop: 2}} />
+                      <Text style={styles.transactionWarningText}>{duplicateReceiptWarning}</Text>
+                    </View>
+                  ) : null}
                   <View style={styles.voucherModalBtnRow}>
                     <Pressable style={styles.voucherModalBtnCancel} onPress={() => setIsConfirming(false)}><Text style={styles.voucherModalBtnCancelText}>Kembali</Text></Pressable>
-                    <Pressable style={[styles.voucherModalBtnRedeem, {backgroundColor: DESIGN.successGreen}]} onPress={handleChargeSubmit} disabled={isCharging}>{isCharging ? <ActivityIndicator color="#FFF"/> : <Text style={styles.voucherModalBtnRedeemText}>Proses</Text>}</Pressable>
+                    <Pressable style={[styles.voucherModalBtnRedeem, {backgroundColor: duplicateReceiptWarning ? DESIGN.border : DESIGN.successGreen}]} onPress={handleChargeSubmit} disabled={isCharging || Boolean(duplicateReceiptWarning)}>{isCharging ? <ActivityIndicator color="#FFF"/> : <Text style={styles.voucherModalBtnRedeemText}>Proses</Text>}</Pressable>
                   </View>
                </View>
             ) : (
@@ -300,13 +437,21 @@ const MemberDetailPage = ({ visible, onClose, onShowAlert }: { visible: boolean,
                      <Pressable onPress={() => setTrxModalVisible(false)}><X size={22} color={DESIGN.textSecondary}/></Pressable>
                   </View>
                   <Text style={styles.inputLabel}>POS Receipt ID</Text>
-                  <TextInput style={styles.trxInput} placeholder="e.g. TR-100299" placeholderTextColor={DESIGN.textSecondary} value={posTrxId} onChangeText={setPosTrxId} autoCapitalize="characters" />
+                  <TextInput
+                    style={styles.trxInput}
+                    placeholder="e.g. 103606"
+                    placeholderTextColor={DESIGN.textSecondary}
+                    keyboardType="number-pad"
+                    inputMode="numeric"
+                    value={posTrxId}
+                    onChangeText={(text) => setPosTrxId(text.replace(/\D/g, ''))}
+                  />
                   <Text style={[styles.inputLabel, {marginTop: 16}]}>Nominal Belanja (Rp)</Text>
                   <TextInput style={styles.trxInput} placeholder="e.g. 45000" placeholderTextColor={DESIGN.textSecondary} keyboardType="numeric" value={amountStr} onChangeText={(t) => setAmountStr(formatRupiah(parseInt(t.replace(/\D/g, ''))||0))} />
                   {amountStr ? ( <View style={{backgroundColor: 'rgba(50, 215, 75, 0.1)', padding: 12, borderRadius: 12, marginTop: 16, alignItems: 'center'}}><Text style={{color: DESIGN.successGreen, fontWeight: '800', fontSize: 14}}>Potensi Poin: +{potentialPoints} Pts</Text></View> ) : null}
                   <View style={[styles.voucherModalBtnRow, {marginTop: 24}]}>
-                    <Pressable style={[styles.voucherModalBtnRedeem, {backgroundColor: DESIGN.textPrimary, width: '100%'}]} onPress={() => { if(!posTrxId.trim()) return onShowAlert("Masukkan Receipt ID!", "error"); if(!amountStr) return onShowAlert("Masukkan Nominal!", "error"); setIsConfirming(true); }}>
-                       <Text style={styles.voucherModalBtnRedeemText}>Lanjut Konfirmasi</Text>
+                    <Pressable style={[styles.voucherModalBtnRedeem, {backgroundColor: DESIGN.textPrimary, width: '100%'}]} onPress={handleOpenTransactionConfirmation} disabled={isCheckingDuplicateReceipt}>
+                       {isCheckingDuplicateReceipt ? <ActivityIndicator color="#FFF" /> : <Text style={styles.voucherModalBtnRedeemText}>Lanjut Konfirmasi</Text>}
                     </Pressable>
                   </View>
                </View>
@@ -375,7 +520,7 @@ export default function CashierDashboard() {
 
     const q = query(collection(firestoreDb, 'transactions'), where('storeId', '==', staff.assignedStoreId));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-       const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+       const docs = snapshot.docs.map(d => normalizeTransaction({ id: d.id, ...d.data() }));
        setRawTransactions(docs);
        setSyncStatus('live');
     }, () => setSyncStatus('error'));
@@ -402,8 +547,8 @@ export default function CashierDashboard() {
               allTrx.push({
                 id: data.id, posTransactionId: data.posTransactionId, type: data.type, cashierName: data.cashierName, storeId: data.storeId,
                 time: trxDate.toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'}), dateStr: trxDate.toLocaleDateString('en-US', {day: 'numeric', month: 'short', year: 'numeric'}), timestamp: trxDate.getTime(), createdAt: data.createdAt,
-                totalAmount: data.totalAmount, total: `Rp ${formatRupiah(data.totalAmount || 0)}`, member: data.memberName || null, memberId: data.memberId || null,
-                pointsEarned: data.pointsEarned || 0, pointStatus: data.memberId ? 'RELEASED' : 'NONE', items: 1
+                totalAmount: data.totalAmount, total: `Rp ${formatRupiah(data.totalAmount || 0)}`, member: data.memberName || null, memberId: data.uid || data.memberId || null,
+                pointsEarned: data.pointsEarned || 0, pointStatus: data.pointsState || 'NONE', items: 1, status: data.status
               });
            } else if (data.type === 'REDEEM') {
               allRedeem.push({
@@ -419,7 +564,8 @@ export default function CashierDashboard() {
                  rev += (data.totalAmount || 0); trxCount += 1;
                  const hour = trxDate.getHours();
                  hourlyData[hour] += (data.totalAmount || 0);
-                 if (data.memberId) membersMap.set(data.memberId, { name: data.memberName, time: trxDate });
+                 const memberUid = data.uid || data.memberId;
+                 if (memberUid) membersMap.set(memberUid, { name: data.memberName, time: trxDate });
               } else if (data.type === 'REDEEM') {
                  const title = data.voucherTitle || 'Voucher';
                  promosMap.set(title, (promosMap.get(title) || 0) + 1);
@@ -499,7 +645,8 @@ export default function CashierDashboard() {
                  rev += (data.totalAmount || 0); trxCount += 1;
                  const hour = trxDate.getHours();
                  hourlyData[hour] += (data.totalAmount || 0);
-                 if (data.memberId) membersMap.set(data.memberId, { name: data.memberName, time: trxDate });
+                 const memberUid = data.uid || data.memberId;
+                 if (memberUid) membersMap.set(memberUid, { name: data.memberName, time: trxDate });
               } else if (data.type === 'REDEEM') {
                  const title = data.voucherTitle || 'Voucher';
                  promosMap.set(title, (promosMap.get(title) || 0) + 1);
@@ -567,11 +714,12 @@ export default function CashierDashboard() {
 
       if (userDocSnap.exists()) {
         const userData: any = userDocSnap.data();
-        if (userData.role === 'member') {
-          storeState.setActiveMember({ uid: targetUid, name: userData.name || 'Member Tanpa Nama', phone: userData.phoneNumber || '-', points: userData.currentPoints || 0, tier: userData.tier || 'Silver', walletBalance: 0, vouchers: userData.vouchers || [] });
+        if (isMemberLikeUser(userData)) {
+          const memberVouchers = getMemberVouchers(userData);
+          storeState.setActiveMember({ uid: targetUid, name: userData.name || 'Member Tanpa Nama', phone: userData.phoneNumber || '-', points: userData.currentPoints || userData.points || 0, tier: userData.tier || 'Silver', walletBalance: 0, vouchers: memberVouchers });
           setIsMemberPageVisible(true); 
           if (scannedVoucherCode) {
-             const foundVoucher = userData.vouchers?.find((v: any) => v.code === scannedVoucherCode);
+             const foundVoucher = memberVouchers?.find((v: any) => v.code === scannedVoucherCode);
              if (foundVoucher) {
                 if (foundVoucher.isUsed) { showCustomAlert(`Voucher "${foundVoucher.title}" sudah dipakai!`, "error"); } 
                 else { setTimeout(() => { setScannedVoucher(foundVoucher); }, 400); }
@@ -587,7 +735,7 @@ export default function CashierDashboard() {
     try {
       await redeemVoucher();
       showCustomAlert("Voucher berhasil di-mark as used!", "success");
-    } catch (e) { showCustomAlert("Gagal redeem voucher.", "error"); } 
+    } catch (e: any) { showCustomAlert(e?.message || "Gagal redeem voucher.", "error"); } 
     finally { setIsRedeeming(false); }
   };
 
@@ -741,7 +889,6 @@ export default function CashierDashboard() {
 
     return (
       <View>
-        {/* Peak summary row */}
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 14 }}>
           <View>
             <Text style={{ fontSize: 11, fontWeight: '600', color: DESIGN.textSecondary, letterSpacing: 0.2, marginBottom: 2 }}>REVENUE PER JAM</Text>
@@ -759,7 +906,6 @@ export default function CashierDashboard() {
           )}
         </View>
 
-        {/* Bars */}
         <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: 80, gap: 3 }}>
           {displayHours.map(h => {
             const val = dailyStats.hourlyChart[h] || 0;
@@ -784,7 +930,6 @@ export default function CashierDashboard() {
           })}
         </View>
 
-        {/* X-axis labels */}
         <View style={{ flexDirection: 'row', marginTop: 5, gap: 3 }}>
           {displayHours.map((h, i) => (
             <Text key={h} style={{ flex: 1, fontSize: 8.5, fontWeight: '600', color: DESIGN.textSecondary, textAlign: 'center' }}>
@@ -811,8 +956,6 @@ export default function CashierDashboard() {
 
     return (
       <>
-        {/* DATE PICKER OVERLAY */}
-        {/* Android: native dialog manages its own presentation — no custom sheet needed */}
         {Platform.OS === 'android' && showDatePicker && (
           <DateTimePicker
             value={selectedFilterDate}
@@ -824,7 +967,6 @@ export default function CashierDashboard() {
             }}
           />
         )}
-        {/* iOS: animated slide-up sheet with inline spinner */}
         {Platform.OS === 'ios' && datePickerMounted && (
           <>
             <TouchableWithoutFeedback onPress={closeDatePicker}>
@@ -860,7 +1002,6 @@ export default function CashierDashboard() {
           </>
         )}
 
-        {/* HEADER */}
         <View style={styles.floatingModalHeader}>
           <View style={[styles.floatingModalIconBox, { backgroundColor: `${accentColor}18` }]}>
             {activeModal === 'REVENUE' && <TrendingUp color={accentColor} size={20} />}
@@ -881,7 +1022,6 @@ export default function CashierDashboard() {
         {renderFilterBar()}
         <View style={styles.floatingModalDivider} />
 
-        {/* CONTENT */}
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.floatingModalBody} bounces={true}>
           {activeModal === 'REVENUE' && (
             <View>
@@ -994,12 +1134,10 @@ export default function CashierDashboard() {
                       const platP = total > 0 ? (todayStats.tiers.platinum / total) * 100 : 0;
                       return (
                         <View style={{ flex: 1, justifyContent: 'space-between' }}>
-                          {/* Header */}
                           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                             <Text style={styles.bentoLabel}>Member Tiers</Text>
                             <Crown size={14} color={DESIGN.gold} strokeWidth={2} />
                           </View>
-                          {/* Tier rows */}
                           <View style={{ gap: 6 }}>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -1023,7 +1161,6 @@ export default function CashierDashboard() {
                               <Text style={{ fontSize: 14, fontWeight: '700', color: DESIGN.textPrimary, letterSpacing: -0.3 }}>{todayStats.tiers.platinum}</Text>
                             </View>
                           </View>
-                          {/* Segmented bar */}
                           <View style={{ height: 4, borderRadius: 2, flexDirection: 'row', overflow: 'hidden', backgroundColor: 'rgba(0,0,0,0.06)', gap: 1 }}>
                             {total > 0 ? (
                               <>
@@ -1090,8 +1227,18 @@ export default function CashierDashboard() {
                         <View style={styles.historyTotalBox}>
                           <Text style={styles.historyTotalText}>{item.total}</Text>
                           {item.pointsEarned > 0 && (
-                            <View style={[styles.historyPointBadge, item.pointStatus === 'RELEASED' && { backgroundColor: 'rgba(50,215,75,0.1)' }]}>
-                              <Text style={[styles.historyPointTextBadge, item.pointStatus === 'RELEASED' && { color: DESIGN.successGreen }]}>+{item.pointsEarned} pts</Text>
+                            <View style={[
+                              styles.historyPointBadge,
+                              item.pointStatus === 'AVAILABLE' && { backgroundColor: 'rgba(50,215,75,0.1)' },
+                              item.pointStatus === 'PENDING' && { backgroundColor: 'rgba(255,159,10,0.12)' },
+                            ]}>
+                              <Text style={[
+                                styles.historyPointTextBadge,
+                                item.pointStatus === 'AVAILABLE' && { color: DESIGN.successGreen },
+                                item.pointStatus === 'PENDING' && { color: DESIGN.outstandingOrange },
+                              ]}>
+                                +{item.pointsEarned} pts {item.pointStatus === 'PENDING' ? '· Pending' : ''}
+                              </Text>
                             </View>
                           )}
                         </View>
@@ -1099,13 +1246,13 @@ export default function CashierDashboard() {
                     );
                   } else {
                     return (
-                      <Pressable style={({pressed}) => [styles.historyRow, pressed && { backgroundColor: 'rgba(0,0,0,0.02)', transform: [{scale: 0.98}] }]} onPress={() => setSelectedHistoryItem(item)}>
+                      <Pressable style={({pressed}) => [styles.historyRow, styles.historyRedeemRow, pressed && { backgroundColor: 'rgba(0,0,0,0.02)', transform: [{scale: 0.98}] }]} onPress={() => setSelectedHistoryItem(item)}>
                         <View style={[styles.historyIconBox, { backgroundColor: 'rgba(211,35,42,0.07)' }]}>
                           <Ticket size={17} color={DESIGN.brandRed} strokeWidth={2} />
                         </View>
-                        <View style={styles.historyInfo}>
-                          <Text style={styles.historyTrxId} numberOfLines={1}>{item.voucherTitle}</Text>
-                          <Text style={styles.historyDetails}>{item.time}{item.member ? ` · ${item.member}` : ''}</Text>
+                        <View style={[styles.historyInfo, styles.historyRedeemInfo]}>
+                          <Text style={styles.historyRedeemTitle} numberOfLines={1} ellipsizeMode="tail">{item.voucherTitle}</Text>
+                          <Text style={styles.historyRedeemDetails} numberOfLines={1} ellipsizeMode="tail">{item.time}{item.member ? ` · ${item.member}` : ''}</Text>
                         </View>
                         <View style={styles.historyRedeemBadge}>
                           <Text style={styles.historyRedeemBadgeText}>REDEEM</Text>
@@ -1154,9 +1301,7 @@ export default function CashierDashboard() {
     <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={DESIGN.canvas} />
       
-      {/* Date picker ditangani dalam renderModalContent sebagai overlay */}
-
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <Image source={require('../../assets/images/logo1.webp')} style={styles.headerLogo} resizeMode="contain" />
@@ -1198,14 +1343,12 @@ export default function CashierDashboard() {
 
       <Modal visible={activeModal !== null} transparent={true} animationType="none" onRequestClose={closeModal}>
         <View style={styles.floatingModalWrapper}>
-          {/* Backdrop blur — opacity driven by backdropAnim */}
           <TouchableWithoutFeedback onPress={closeModal}>
             <Animated.View style={[StyleSheet.absoluteFill, { opacity: backdropAnim }]}>
               <BlurView intensity={55} tint="dark" style={StyleSheet.absoluteFill} />
             </Animated.View>
           </TouchableWithoutFeedback>
 
-          {/* Outer: JS-driver handles layout (left/top/width/height/radius) */}
           <Animated.View
             pointerEvents="auto"
             style={[
@@ -1220,11 +1363,8 @@ export default function CashierDashboard() {
               },
             ]}
           >
-            {/* Clip view — borderRadius + overflow handled by parent, this is a plain View */}
             <View style={styles.floatingModalClipView}>
-              {/* Native-driver: card invisible on first render → no white flash */}
               <Animated.View style={{ flex: 1, opacity: backdropAnim }}>
-                {/* Native-driver: content fades in after card is mostly expanded */}
                 <Animated.View style={{ opacity: contentOpacity, flex: 1, paddingTop: insets.top, paddingBottom: insets.bottom }}>
                   {renderModalContent()}
                 </Animated.View>
@@ -1239,9 +1379,7 @@ export default function CashierDashboard() {
 
       <PopModal visible={selectedHistoryItem !== null} onClose={() => setSelectedHistoryItem(null)}>
         <View style={styles.historyDetailCard}>
-          {/* Drag pill */}
           <View style={styles.historyDetailPill} />
-          {/* Header */}
           <View style={styles.historyDetailHeader}>
             <View style={[styles.historyDetailIconBox, selectedHistoryItem?.type === 'REDEEM' ? { backgroundColor: 'rgba(211,35,42,0.1)' } : { backgroundColor: DESIGN.canvas }]}>
               {selectedHistoryItem?.type === 'REDEEM' ? <Ticket size={20} color={DESIGN.brandRed} strokeWidth={2} /> : <ShoppingBag size={20} color={DESIGN.textPrimary} strokeWidth={2} />}
@@ -1254,7 +1392,6 @@ export default function CashierDashboard() {
               <X size={16} color={DESIGN.textSecondary} strokeWidth={2.5} />
             </Pressable>
           </View>
-          {/* Hero amount */}
           {selectedHistoryItem?.type === 'EARN' && (
             <View style={styles.historyDetailAmountBox}>
               <Text style={styles.historyDetailAmountLabel}>TOTAL BELANJA</Text>
@@ -1262,12 +1399,11 @@ export default function CashierDashboard() {
             </View>
           )}
           {selectedHistoryItem?.type === 'REDEEM' && (
-            <View style={[styles.historyDetailAmountBox, { backgroundColor: 'rgba(211,35,42,0.06)' }]}>
+            <View style={[styles.historyDetailAmountBox, styles.historyDetailRedeemBox]}>
               <Text style={[styles.historyDetailAmountLabel, { color: DESIGN.brandRed }]}>VOUCHER</Text>
-              <Text style={[styles.historyDetailAmount, { color: DESIGN.brandRed, fontSize: 20 }]} numberOfLines={1}>{selectedHistoryItem?.voucherTitle || '-'}</Text>
+              <Text style={[styles.historyDetailAmount, styles.historyDetailRedeemTitle]}>{selectedHistoryItem?.voucherTitle || '-'}</Text>
             </View>
           )}
-          {/* Info rows */}
           <View style={styles.historyDetailRows}>
             <View style={styles.historyDetailRow}>
               <Text style={styles.historyDetailLabel}>Receipt ID</Text>
@@ -1285,8 +1421,13 @@ export default function CashierDashboard() {
             )}
             {selectedHistoryItem?.type === 'EARN' && selectedHistoryItem?.pointsEarned > 0 && (
               <View style={[styles.historyDetailRow, { borderBottomWidth: 0 }]}>
-                <Text style={styles.historyDetailLabel}>Poin Didapat</Text>
-                <Text style={[styles.historyDetailValue, { color: DESIGN.successGreen }]}>+{selectedHistoryItem?.pointsEarned} pts</Text>
+                <Text style={styles.historyDetailLabel}>Poin</Text>
+                <Text style={[
+                  styles.historyDetailValue,
+                  selectedHistoryItem?.pointsState === 'PENDING' ? { color: DESIGN.outstandingOrange } : { color: DESIGN.successGreen }
+                ]}>
+                  +{selectedHistoryItem?.pointsEarned} pts{selectedHistoryItem?.pointsState === 'PENDING' ? ' (pending)' : ''}
+                </Text>
               </View>
             )}
           </View>
@@ -1301,10 +1442,18 @@ export default function CashierDashboard() {
            <View style={styles.voucherModalIcon}>
              <Ticket size={36} color={DESIGN.brandRed} />
            </View>
-           <Text style={styles.voucherModalTitle}>{scannedVoucher?.title}</Text>
-           <Text style={styles.voucherModalExp}>
-              Berlaku s/d: {scannedVoucher?.expiresAt ? new Date(scannedVoucher.expiresAt).toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'}) : '-'}
-           </Text>
+           <View style={styles.voucherModalTextBlock}>
+             <Text style={styles.voucherModalTitle} numberOfLines={2} ellipsizeMode="tail">{scannedVoucher?.title}</Text>
+             <Text style={styles.voucherModalExp}>
+                Berlaku s/d: {scannedVoucher?.expiresAt ? new Date(scannedVoucher.expiresAt).toLocaleDateString('id-ID', {day: 'numeric', month: 'long', year: 'numeric'}) : '-'}
+             </Text>
+             {!!scannedVoucher?.code && (
+               <View style={styles.voucherModalCodePill}>
+                 <Text style={styles.voucherModalCodeLabel}>Kode Voucher</Text>
+                 <Text style={styles.voucherModalCodeValue}>{scannedVoucher.code}</Text>
+               </View>
+             )}
+           </View>
            <View style={styles.voucherModalBtnRow}>
              <Pressable style={styles.voucherModalBtnCancel} onPress={() => setScannedVoucher(null)} disabled={isRedeeming}>
                <Text style={styles.voucherModalBtnCancelText}>Batal</Text>
@@ -1411,6 +1560,12 @@ const styles = StyleSheet.create({
   historyInfo: { flex: 1 },
   historyTrxId: { fontSize: 15, fontWeight: '800', color: DESIGN.textPrimary },
   historyDetails: { fontSize: 13, color: DESIGN.textSecondary, marginTop: 4 },
+  historyRedeemRow: { alignItems: 'center' },
+  historyRedeemInfo: { flex: 1, minWidth: 0, paddingRight: 12 },
+  historyRedeemTitle: { fontSize: 15, fontWeight: '800', color: DESIGN.textPrimary, flexShrink: 1 },
+  historyRedeemDetails: { fontSize: 13, color: DESIGN.textSecondary, marginTop: 4, flexShrink: 1 },
+  historyRedeemBadge: { minWidth: 74, height: 34, paddingHorizontal: 12, borderRadius: 17, backgroundColor: 'rgba(211,35,42,0.08)', justifyContent: 'center', alignItems: 'center', marginLeft: 4, flexShrink: 0 },
+  historyRedeemBadgeText: { fontSize: 12, fontWeight: '900', color: DESIGN.brandRed, letterSpacing: 0.6 },
   historyTotalBox: { alignItems: 'flex-end', justifyContent: 'center' },
   historyTotalText: { fontSize: 16, fontWeight: '900', color: DESIGN.textPrimary },
   historyPointText: { fontSize: 12, fontWeight: '800', color: DESIGN.successGreen },
@@ -1560,13 +1715,19 @@ const styles = StyleSheet.create({
   alertText: { flex: 1, fontSize: 14, fontWeight: '700', color: DESIGN.textPrimary },
 
   voucherModalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
-  voucherModalContainer: { width: '100%', maxWidth: 400 },
-  voucherModalCardInner: { width: '100%', backgroundColor: DESIGN.surface, borderRadius: 32, padding: 32, alignItems: 'center', shadowColor: '#000', shadowOffset: {width: 0, height: 20}, shadowOpacity: 0.3, shadowRadius: 30, elevation: 15 },
+  voucherModalContainer: { width: '100%', maxWidth: 420 },
+  voucherModalCardInner: { width: '100%', backgroundColor: DESIGN.surface, borderRadius: 32, paddingTop: 32, paddingBottom: 24, paddingHorizontal: 24, alignItems: 'stretch', shadowColor: '#000', shadowOffset: {width: 0, height: 20}, shadowOpacity: 0.3, shadowRadius: 30, elevation: 15 },
   modalCloseIcon: { position: 'absolute', top: 20, right: 20, padding: 8, zIndex: 10 },
-  voucherModalIcon: { width: 72, height: 72, borderRadius: 36, backgroundColor: 'rgba(211, 35, 42, 0.1)', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
-  voucherModalTitle: { fontSize: 22, fontWeight: '900', color: DESIGN.textPrimary, textAlign: 'center', marginBottom: 6, letterSpacing: -0.5 },
-  voucherModalExp: { fontSize: 14, fontWeight: '600', color: DESIGN.textSecondary, marginBottom: 32 },
-  voucherModalBtnRow: { flexDirection: 'row', gap: 12, width: '100%' },
+  voucherModalIcon: { width: 72, height: 72, borderRadius: 36, backgroundColor: 'rgba(211, 35, 42, 0.1)', justifyContent: 'center', alignItems: 'center', marginBottom: 16, alignSelf: 'center' },
+  voucherModalTextBlock: { width: '100%', alignItems: 'center', marginBottom: 24 },
+  voucherModalTitle: { width: '100%', fontSize: 22, fontWeight: '900', color: DESIGN.textPrimary, textAlign: 'center', marginBottom: 8, letterSpacing: -0.5, lineHeight: 28, paddingHorizontal: 12 },
+  voucherModalExp: { width: '100%', fontSize: 14, fontWeight: '600', color: DESIGN.textSecondary, marginBottom: 16, textAlign: 'center', lineHeight: 20, paddingHorizontal: 8 },
+  voucherModalCodePill: { width: '100%', backgroundColor: 'rgba(211,35,42,0.06)', borderRadius: 18, paddingVertical: 12, paddingHorizontal: 14, alignItems: 'center' },
+  voucherModalCodeLabel: { fontSize: 11, fontWeight: '800', color: DESIGN.brandRed, letterSpacing: 0.8, marginBottom: 4, textTransform: 'uppercase' },
+  voucherModalCodeValue: { fontSize: 14, fontWeight: '800', color: DESIGN.textPrimary, textAlign: 'center' },
+  transactionWarningBox: { flexDirection: 'row', alignItems: 'flex-start', width: '100%', backgroundColor: 'rgba(255,159,10,0.12)', borderRadius: 18, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 18 },
+  transactionWarningText: { flex: 1, fontSize: 13, lineHeight: 18, fontWeight: '700', color: DESIGN.outstandingOrange },
+  voucherModalBtnRow: { flexDirection: 'row', gap: 12, width: '100%', alignItems: 'stretch' },
   voucherModalBtnCancel: { flex: 1, height: 52, borderRadius: 16, backgroundColor: DESIGN.canvas, justifyContent: 'center', alignItems: 'center' },
   voucherModalBtnCancelText: { fontSize: 15, fontWeight: '700', color: DESIGN.textSecondary },
   voucherModalBtnRedeem: { flex: 1, height: 52, borderRadius: 16, backgroundColor: DESIGN.brandRed, justifyContent: 'center', alignItems: 'center', shadowColor: DESIGN.brandRed, shadowOffset: {width:0, height:6}, shadowOpacity: 0.3, shadowRadius: 12, elevation: 8 },
@@ -1574,9 +1735,9 @@ const styles = StyleSheet.create({
   modalFullBtn: { width: '100%', height: 52, borderRadius: 16, backgroundColor: DESIGN.canvas, justifyContent: 'center', alignItems: 'center' },
   modalFullBtnText: { fontSize: 15, fontWeight: '700', color: DESIGN.textSecondary },
 
-  historyDetailRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: DESIGN.canvas },
-  historyDetailLabel: { fontSize: 13, fontWeight: '500', color: DESIGN.textSecondary },
-  historyDetailValue: { fontSize: 13, fontWeight: '700', color: DESIGN.textPrimary, textAlign: 'right', flex: 1, marginLeft: 16 },
+  historyDetailRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: DESIGN.canvas, gap: 16 },
+  historyDetailLabel: { fontSize: 13, fontWeight: '500', color: DESIGN.textSecondary, width: 84, paddingTop: 2 },
+  historyDetailValue: { fontSize: 13, fontWeight: '700', color: DESIGN.textPrimary, textAlign: 'right', flex: 1, flexShrink: 1, lineHeight: 18 },
 
   // --- HISTORY DETAIL CARD (Apple-style bottom sheet modal) ---
   historyDetailCard: { width: '100%', backgroundColor: DESIGN.surface, borderRadius: 28, paddingTop: 12, paddingHorizontal: 20, paddingBottom: 28, shadowColor: '#000', shadowOffset: {width: 0, height: 20}, shadowOpacity: 0.25, shadowRadius: 30, elevation: 15 },
@@ -1586,8 +1747,10 @@ const styles = StyleSheet.create({
   historyDetailTitle: { fontSize: 15, fontWeight: '800', color: DESIGN.textPrimary, letterSpacing: -0.2 },
   historyDetailDate: { fontSize: 11, fontWeight: '500', color: DESIGN.textSecondary, marginTop: 2 },
   historyDetailClose: { width: 30, height: 30, borderRadius: 15, backgroundColor: DESIGN.canvas, justifyContent: 'center', alignItems: 'center' },
-  historyDetailAmountBox: { backgroundColor: DESIGN.canvas, borderRadius: 16, padding: 14, marginBottom: 14 },
+  historyDetailAmountBox: { backgroundColor: DESIGN.canvas, borderRadius: 16, padding: 14, marginBottom: 14, width: '100%' },
   historyDetailAmountLabel: { fontSize: 10, fontWeight: '700', color: DESIGN.textSecondary, letterSpacing: 0.8, marginBottom: 4 },
   historyDetailAmount: { fontSize: 26, fontWeight: '900', color: DESIGN.textPrimary, letterSpacing: -0.5 },
+  historyDetailRedeemBox: { backgroundColor: 'rgba(211,35,42,0.06)' },
+  historyDetailRedeemTitle: { color: DESIGN.brandRed, fontSize: 20, lineHeight: 25 },
   historyDetailRows: { marginTop: 2 },
 });

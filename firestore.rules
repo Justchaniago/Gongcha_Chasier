@@ -1,0 +1,144 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function hasAdminUserDoc() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/admin_users/$(request.auth.uid));
+    }
+
+    function adminUserDoc() {
+      return get(/databases/$(database)/documents/admin_users/$(request.auth.uid));
+    }
+
+    function normalizeRole(role) {
+      return role == null
+        ? ""
+        : role in ['SUPER_ADMIN', 'ADMIN', 'MASTER', 'admin', 'master']
+          ? "SUPER_ADMIN"
+          : role in ['STAFF', 'MANAGER', 'manager']
+            ? "STAFF"
+            : role;
+    }
+
+    function isActiveAdminUser() {
+      return hasAdminUserDoc() &&
+        (!("isActive" in adminUserDoc().data) || adminUserDoc().data.isActive == true);
+    }
+
+    function currentRole() {
+      return isActiveAdminUser() ? normalizeRole(adminUserDoc().data.role) : "";
+    }
+
+    function isPrivilegedAdmin() {
+      return currentRole() == "SUPER_ADMIN";
+    }
+
+    function isStoreScopedStaff() {
+      return currentRole() == "STAFF";
+    }
+
+    function assignedStoreId() {
+      return isActiveAdminUser() ? adminUserDoc().data.assignedStoreId : null;
+    }
+
+    function hasAssignedStore() {
+      return assignedStoreId() is string && assignedStoreId() != "";
+    }
+
+    function canAccessStore(storeId) {
+      return isPrivilegedAdmin() ||
+        (isStoreScopedStaff() &&
+          hasAssignedStore() &&
+          storeId is string &&
+          storeId == assignedStoreId());
+    }
+
+    function isSelfAdminUser(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function canReadUserDoc() {
+      return isPrivilegedAdmin() || isStoreScopedStaff();
+    }
+
+    function canMutateUserDoc() {
+      return isPrivilegedAdmin() ||
+        (isStoreScopedStaff() &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly([
+              'vouchers',
+              'activeVouchers',
+              'pendingPoints',
+              'currentPoints',
+              'lifetimePoints',
+              'points',
+              'updatedAt',
+            ]));
+    }
+
+    function transactionStoreId() {
+      return resource.data.storeId;
+    }
+
+    function incomingTransactionStoreId() {
+      return request.resource.data.storeId;
+    }
+
+    function canReadTransaction() {
+      return canAccessStore(transactionStoreId());
+    }
+
+    function canCreateTransaction() {
+      return canAccessStore(incomingTransactionStoreId());
+    }
+
+    function canUpdateTransaction() {
+      return canAccessStore(transactionStoreId()) &&
+        canAccessStore(incomingTransactionStoreId()) &&
+        incomingTransactionStoreId() == transactionStoreId();
+    }
+
+    function canReadDailyStat() {
+      return resource.data.storeId is string &&
+        canAccessStore(resource.data.storeId);
+    }
+
+    function isSelf(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /admin_users/{userId} {
+      allow read: if isSelfAdminUser(userId) || isPrivilegedAdmin();
+      allow write: if false;
+    }
+
+    match /users/{userId} {
+      allow read: if canReadUserDoc() || isSelf(userId);
+      allow create: if isPrivilegedAdmin() || isSelf(userId);
+      allow update: if canMutateUserDoc() || isSelf(userId);
+      allow delete: if false;
+    }
+
+    match /transactions/{transactionId} {
+      allow read: if canReadTransaction();
+      allow create: if canCreateTransaction();
+      allow update: if canUpdateTransaction();
+      allow delete: if false;
+    }
+
+    match /daily_stats/{statId} {
+      allow read: if canReadDailyStat();
+      allow write: if false;
+    }
+
+    match /rewards_catalog/{rewardId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+  }
+}

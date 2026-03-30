@@ -1,13 +1,10 @@
 
-
 import '../global.css';
-import { ThemeProvider } from '../src/context/ThemeContext';
+import type { PropsWithChildren } from 'react';
 import BiegeBlurBackground from '../src/components/BiegeBlurBackground';
 
-export default function RootLayout({ children }) {
+export default function RootLayout({ children }: PropsWithChildren) {
 	return (
-		<ThemeProvider>
-			<BiegeBlurBackground>{children}</BiegeBlurBackground>
-		</ThemeProvider>
+		<BiegeBlurBackground>{children}</BiegeBlurBackground>
 	);
 }

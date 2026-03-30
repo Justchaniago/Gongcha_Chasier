@@ -1,7 +1,8 @@
+import type { PropsWithChildren } from 'react';
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 
-const BiegeBlurBackground = ({ children }) => (
+const BiegeBlurBackground = ({ children }: PropsWithChildren) => (
   <View style={styles.container}>
     {/* Background layer */}
     <View style={styles.background} />
@@ -19,9 +20,6 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: '#F5F5DC', // biege
     opacity: 0.95,
-    // Blur effect for iOS
-    backdropFilter: 'blur(16px)', // web only
-    // For React Native, use expo-blur or similar for blur
   },
   content: {
     flex: 1,

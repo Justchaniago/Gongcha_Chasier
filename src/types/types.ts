@@ -40,6 +40,7 @@ export interface UserProfile {
   email?: string; 
   photoURL?: string; 
   points?: number;
+  pendingPoints?: number;
   currentPoints?: number;
   lifetimePoints?: number;
   tierXp?: number;
@@ -56,13 +57,15 @@ export interface UserProfile {
 // 3. TRANSACTIONS
 // ============================================================================
 export type TransactionStatus = "PENDING" | "COMPLETED" | "CANCELLED" | "REFUNDED" | "pending" | "verified" | "rejected";
-export type TransactionType = "earn" | "redeem";
+export type TransactionType = "earn" | "redeem" | "EARN" | "REDEEM";
+export type TransactionPointsState = "PENDING" | "AVAILABLE" | "NONE";
 
 export interface TransactionRecord {
   id?: string;
   receiptNumber: string;  // Aligned dengan web panel (sebelumnya transactionId)
   storeId: string;        // Wajib ada mengikuti web panel
   storeName: string;      // Aligned dengan web panel (sebelumnya storeLocation)
+  uid?: string | null;
   userId: string | null;  // Aligned dengan web panel
   totalAmount: number;    // Aligned dengan web panel (sebelumnya amount)
   status: TransactionStatus;
@@ -73,7 +76,11 @@ export interface TransactionRecord {
   memberName?: string;    
   staffId?: string;       
   potentialPoints?: number;
+  pointsEarned?: number;
   type?: TransactionType;
+  posTransactionId?: string;
+  cashierName?: string;
+  pointsState?: TransactionPointsState;
   verifiedAt?: any;
   verifiedBy?: string;
   

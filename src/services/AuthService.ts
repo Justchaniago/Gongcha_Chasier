@@ -29,15 +29,15 @@ const withTimeout = async <T>(promise: Promise<T>, label: string, timeoutMs: num
 };
 
 const buildFallbackProfile = (uid: string, name: string, phone: string, role?: 'master' | 'trial'): UserProfile => ({
-  id: uid,
+  uid,
   name: name || 'Member',
   phoneNumber: phone || '',
+  pendingPoints: 0,
   currentPoints: 0,
   lifetimePoints: 0,
   tierXp: 0,
   tier: 'Silver',
   joinedDate: new Date().toISOString(),
-  xpHistory: [],
   vouchers: [],
   role: role || 'trial',
 });
@@ -96,10 +96,13 @@ export const AuthService = {
       const docSnap = await withTimeout(getDoc(docRef), 'Load profile', PROFILE_READ_TIMEOUT_MS);
 
       if (docSnap.exists()) {
-        const profile = docSnap.data() as UserProfile;
-        // Ensure UID consistency
-        if (profile.id !== user.uid) {
-          profile.id = user.uid;
+        const profile = docSnap.data() as UserProfile & { id?: string };
+        // Ensure UID consistency while tolerating legacy `id` field.
+        if (profile.uid !== user.uid || profile.id === user.uid) {
+          profile.uid = user.uid;
+          if ('id' in profile) {
+            delete profile.id;
+          }
           await setDoc(docRef, profile, { merge: true });
         }
         return profile;

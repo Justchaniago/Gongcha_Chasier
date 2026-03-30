@@ -1,7 +1,7 @@
 // src/store/useCashierStore.ts
 import {create} from "zustand";
 import {onAuthStateChanged, signInWithEmailAndPassword, signOut} from "firebase/auth";
-import {doc, getDoc, updateDoc} from "firebase/firestore";
+import {collection, doc, getDoc, getDocs, query, where} from "firebase/firestore";
 import {firebaseAuth, firestoreDb} from "../config/firebase";
 import {
   StaffProfile,
@@ -20,6 +20,9 @@ export interface MemberData {
   walletBalance?: number; 
   vouchers: UserVoucher[]; 
 }
+
+const markVoucherAsUsed = (vouchers: UserVoucher[] = [], scannedVoucher: UserVoucher) =>
+  vouchers.map((v) => (v.code === scannedVoucher.code ? {...v, isUsed: true} : v));
 
 interface CashierState {
   staff: StaffProfile | null;
@@ -57,22 +60,42 @@ export const useCashierStore = create<CashierState>((set, get) => ({
     if (!staff || !staff.assignedStoreId) return;
 
     try {
-      const dateStr = new Date().toISOString().split("T")[0];
-      const statId = `${dateStr}-${staff.assignedStoreId}`;
-      const statSnap = await getDoc(doc(firestoreDb, "daily_stats", statId));
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
 
-      if (statSnap.exists()) {
-        const data = statSnap.data();
-        set({
-          totalRevenue: data.totalRevenue || 0,
-          totalTransactions: data.totalTransactions || 0,
-          memberVisits: data.visitedMemberIds ? data.visitedMemberIds.length : 0,
-        });
-      } else {
-        set({totalRevenue: 0, totalTransactions: 0, memberVisits: 0});
-      }
+      const trxSnap = await getDocs(
+        query(collection(firestoreDb, "transactions"), where("storeId", "==", staff.assignedStoreId))
+      );
+
+      let totalRevenue = 0;
+      let totalTransactions = 0;
+      const memberVisits = new Set<string>();
+
+      trxSnap.docs.forEach((trxDoc) => {
+        const data = trxDoc.data() as TransactionRecord;
+        const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : null;
+        if (!createdAt || createdAt < startOfDay) return;
+
+        totalTransactions += 1;
+
+        const normalizedType = typeof data.type === "string" ? data.type.toUpperCase() : "";
+        if (normalizedType === "EARN") {
+          totalRevenue += data.totalAmount || 0;
+        }
+
+        const relatedUid = data.uid || data.userId || data.memberId;
+        if (relatedUid) {
+          memberVisits.add(relatedUid);
+        }
+      });
+
+      set({
+        totalRevenue,
+        totalTransactions,
+        memberVisits: memberVisits.size,
+      });
     } catch (error) {
-      console.error("Error fetching daily_stats:", error);
+      console.error("Error fetching today's cashier stats:", error);
     }
   },
 
@@ -146,56 +169,69 @@ export const useCashierStore = create<CashierState>((set, get) => ({
   processTransaction: async (amount, posId, useMember) => {
     const {staff, activeMember} = get();
     if (!staff) throw new Error("Staff not logged in");
+    const normalizedReceipt = posId.trim();
+    if (!normalizedReceipt) {
+      throw new Error("Nomor receipt wajib diisi.");
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new Error("Total transaksi harus lebih dari 0.");
+    }
+    if (useMember && !activeMember?.uid) {
+      throw new Error("Active member is required for atomic loyalty checkout.");
+    }
 
     await TransactionService.recordTransactionClaim({
-      receiptNumber: posId,
+      receiptNumber: normalizedReceipt,
       totalAmount: amount,
       potentialPoints: useMember ? Math.floor(amount / 1000) : 0,
-      userId: useMember && activeMember ? activeMember.uid : null,
+      uid: useMember && activeMember ? activeMember.uid : null,
       memberId: useMember && activeMember ? activeMember.uid : undefined,
       memberName: useMember && activeMember ? activeMember.name : undefined,
       staffId: staff.uid,
+      cashierName: staff.name,
       storeId: staff.assignedStoreId || "UNKNOWN",
-      storeName: staff.name || "Unknown Store",
+      storeName: staff.assignedStoreId || "UNKNOWN",
     });
     
     set((state) => ({
       totalRevenue: state.totalRevenue + amount,
       totalTransactions: state.totalTransactions + 1,
-      memberVisits: useMember ? state.memberVisits + 1 : state.memberVisits,
+      memberVisits: useMember && activeMember?.uid ? state.memberVisits + 1 : state.memberVisits,
       activeMember: null,
     }));
   },
 
   redeemVoucher: async () => {
     const {staff, activeMember, scannedVoucher} = get();
-    if (!staff || !activeMember || !scannedVoucher) return;
+    if (!staff || !activeMember || !scannedVoucher) {
+      throw new Error("Data redeem belum lengkap.");
+    }
 
-    const updatedVouchers = activeMember.vouchers.map((v) => 
-      v.code === scannedVoucher.code ? {...v, isUsed: true} : v
-    );
+    const updatedVouchers = markVoucherAsUsed(activeMember.vouchers, scannedVoucher);
 
-    await updateDoc(doc(firestoreDb, "users", activeMember.uid), {
-      vouchers: updatedVouchers,
-    });
+    try {
+      await TransactionService.recordRedeemClaim({
+        receiptNumber: scannedVoucher.code,
+        staffId: staff.uid,
+        cashierName: staff.name,
+        storeId: staff.assignedStoreId || "UNKNOWN",
+        storeName: staff.assignedStoreId || "UNKNOWN",
+        userId: activeMember.uid,
+        memberId: activeMember.uid,
+        memberName: activeMember.name,
+        voucherCode: scannedVoucher.code,
+        voucherTitle: scannedVoucher.title,
+      });
 
-    await TransactionService.recordRedeemClaim({
-      receiptNumber: scannedVoucher.code,
-      staffId: staff.uid,
-      storeId: staff.assignedStoreId || "UNKNOWN",
-      storeName: staff.name || "Unknown Store",
-      userId: activeMember.uid,
-      memberId: activeMember.uid,
-      memberName: activeMember.name,
-      voucherCode: scannedVoucher.code,
-      voucherTitle: scannedVoucher.title,
-    });
-
-    set((state) => ({
-      activeMember: {...activeMember, vouchers: updatedVouchers},
-      scannedVoucher: null,
-      totalTransactions: state.totalTransactions + 1,
-    }));
+      set((state) => ({
+        activeMember: {...activeMember, vouchers: updatedVouchers},
+        scannedVoucher: null,
+        totalTransactions: state.totalTransactions + 1,
+      }));
+    } catch (error: any) {
+      console.info("Redeem voucher blocked:", error?.message || error);
+      throw new Error(error?.message || "Redeem voucher gagal disimpan ke Firebase.");
+    }
   },
 
   syncData: async () => {
