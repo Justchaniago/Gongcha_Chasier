@@ -5,6 +5,7 @@ import {collection, doc, getDoc, getDocs, query, where} from "firebase/firestore
 import {firebaseAuth, firestoreDb} from "../config/firebase";
 import {
   StaffProfile,
+  CashierProfile,
   TransactionRecord,
   UserTier,
   UserVoucher,
@@ -26,6 +27,8 @@ const markVoucherAsUsed = (vouchers: UserVoucher[] = [], scannedVoucher: UserVou
 
 interface CashierState {
   staff: StaffProfile | null;
+  activeCashier: CashierProfile | null;
+  isLocked: boolean;
   isAuthenticated: boolean;
   isLoadingAuth: boolean;
   totalRevenue: number;
@@ -37,6 +40,7 @@ interface CashierState {
   login: (email: string, pass: string) => Promise<void>;
   logout: () => Promise<void>;
   initializeAuth: () => void;
+  setActiveCashier: (cashier: CashierProfile | null, locked?: boolean) => void;
   setActiveMember: (member: MemberData | null) => void;
   setScannedVoucher: (voucher: UserVoucher | null) => void; 
   processTransaction: (amount: number, posId: string, useMember: boolean) => Promise<void>;
@@ -47,6 +51,8 @@ interface CashierState {
 
 export const useCashierStore = create<CashierState>((set, get) => ({
   staff: null,
+  activeCashier: null,
+  isLocked: true,
   isAuthenticated: false,
   isLoadingAuth: true,
   totalRevenue: 0,
@@ -107,6 +113,12 @@ export const useCashierStore = create<CashierState>((set, get) => ({
       
       if (docSnap.exists()) {
         const data = docSnap.data();
+        const cashiers: CashierProfile[] = Array.isArray((data as any).cashiers)
+          ? (data as any).cashiers
+          : [];
+        const activeCashier =
+          cashiers.find((c) => c.staffId === userCred.user.uid) || cashiers[0] || null;
+
         set({
           staff: {
             uid: userCred.user.uid,
@@ -114,14 +126,17 @@ export const useCashierStore = create<CashierState>((set, get) => ({
             email: data.email,
             role: data.role,
             assignedStoreId: data.assignedStoreId || "UNKNOWN",
+            cashiers,
           },
+          activeCashier,
+          isLocked: activeCashier ? false : true,
           isAuthenticated: true,
           isLoadingAuth: false,
         });
         await get().fetchTodayStats();
       }
     } catch (e) {
-      set({staff: null, isAuthenticated: false, isLoadingAuth: false});
+      set({staff: null, activeCashier: null, isLocked: true, isAuthenticated: false, isLoadingAuth: false});
     }
   },
 
@@ -129,6 +144,8 @@ export const useCashierStore = create<CashierState>((set, get) => ({
     await signOut(firebaseAuth);
     set({
       staff: null,
+      activeCashier: null,
+      isLocked: true,
       isAuthenticated: false,
       activeMember: null,
       scannedVoucher: null,
@@ -144,6 +161,12 @@ export const useCashierStore = create<CashierState>((set, get) => ({
         const docSnap = await getDoc(doc(firestoreDb, "admin_users", user.uid));
         if (docSnap.exists()) {
           const data = docSnap.data();
+          const cashiers: CashierProfile[] = Array.isArray((data as any).cashiers)
+            ? (data as any).cashiers
+            : [];
+          const activeCashier =
+            cashiers.find((c) => c.staffId === user.uid) || cashiers[0] || null;
+
           set({
             staff: {
               uid: user.uid,
@@ -151,14 +174,23 @@ export const useCashierStore = create<CashierState>((set, get) => ({
               email: data.email,
               role: data.role,
               assignedStoreId: data.assignedStoreId,
+              cashiers,
             },
+            activeCashier,
+            isLocked: activeCashier ? false : true,
             isAuthenticated: true,
             isLoadingAuth: false,
           });
           await get().fetchTodayStats();
         }
       } else {
-        set({staff: null, isAuthenticated: false, isLoadingAuth: false});
+        set({
+          staff: null,
+          activeCashier: null,
+          isLocked: true,
+          isAuthenticated: false,
+          isLoadingAuth: false,
+        });
       }
     });
   },
@@ -166,9 +198,14 @@ export const useCashierStore = create<CashierState>((set, get) => ({
   setActiveMember: (member) => set({activeMember: member}),
   setScannedVoucher: (voucher) => set({scannedVoucher: voucher}),
 
+  setActiveCashier: (cashier, locked) =>
+    set(() => ({ activeCashier: cashier, isLocked: locked ?? (!cashier ? true : false) })),
+
   processTransaction: async (amount, posId, useMember) => {
-    const {staff, activeMember} = get();
+    const {staff, activeMember, activeCashier, isLocked} = get();
     if (!staff) throw new Error("Staff not logged in");
+    if (!activeCashier) throw new Error("Active cashier not selected.");
+    if (isLocked) throw new Error("Cashier is locked. Please unlock first.");
     const normalizedReceipt = posId.trim();
     if (!normalizedReceipt) {
       throw new Error("Nomor receipt wajib diisi.");
@@ -187,8 +224,9 @@ export const useCashierStore = create<CashierState>((set, get) => ({
       uid: useMember && activeMember ? activeMember.uid : null,
       memberId: useMember && activeMember ? activeMember.uid : undefined,
       memberName: useMember && activeMember ? activeMember.name : undefined,
-      staffId: staff.uid,
-      cashierName: staff.name,
+      staffId: activeCashier.staffId,
+      cashierName: activeCashier.name,
+      passcode: activeCashier.passcode,
       storeId: staff.assignedStoreId || "UNKNOWN",
       storeName: staff.assignedStoreId || "UNKNOWN",
     });
@@ -202,18 +240,20 @@ export const useCashierStore = create<CashierState>((set, get) => ({
   },
 
   redeemVoucher: async () => {
-    const {staff, activeMember, scannedVoucher} = get();
-    if (!staff || !activeMember || !scannedVoucher) {
+    const {staff, activeMember, scannedVoucher, activeCashier, isLocked} = get();
+    if (!staff || !activeMember || !scannedVoucher || !activeCashier) {
       throw new Error("Data redeem belum lengkap.");
     }
+    if (isLocked) throw new Error("Cashier is locked. Please unlock first.");
 
     const updatedVouchers = markVoucherAsUsed(activeMember.vouchers, scannedVoucher);
 
     try {
       await TransactionService.recordRedeemClaim({
         receiptNumber: scannedVoucher.code,
-        staffId: staff.uid,
-        cashierName: staff.name,
+        staffId: activeCashier.staffId,
+        cashierName: activeCashier.name,
+        passcode: activeCashier.passcode,
         storeId: staff.assignedStoreId || "UNKNOWN",
         storeName: staff.assignedStoreId || "UNKNOWN",
         userId: activeMember.uid,

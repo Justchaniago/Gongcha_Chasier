@@ -5,7 +5,7 @@ import {
   Image, Animated, Easing, NativeSyntheticEvent, NativeScrollEvent, TouchableWithoutFeedback,
   Modal, SectionList, ActivityIndicator, TextInput, KeyboardAvoidingView 
 } from 'react-native';
-import { QrCode, TrendingUp, Users, Ticket, Crown, X, ChevronRight, Activity, Calendar, Filter, ScanLine, ArrowLeft, Star, ShoppingBag, Banknote, Smartphone, Clock, CheckCircle2, MapPin, Store, RefreshCcw, LogOut, AlertCircle, ChevronLeft } from 'lucide-react-native';
+import { QrCode, TrendingUp, Users, Ticket, Crown, X, ChevronRight, Activity, Calendar, Filter, ScanLine, ArrowLeft, Star, ShoppingBag, Banknote, Smartphone, Clock, CheckCircle2, MapPin, Store, RefreshCcw, LogOut, AlertCircle, ChevronLeft, Lock } from 'lucide-react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { BlurView } from 'expo-blur';
@@ -331,7 +331,11 @@ const MemberDetailPage = ({ visible, onClose, onShowAlert }: { visible: boolean,
                </View>
                <View style={styles.historyInfo}>
                   <Text style={styles.historyTrxId}>{item.type === 'REDEEM' ? (item.voucherTitle || 'Voucher') : (item.posTransactionId || item.id)}</Text>
-                  <Text style={styles.historyDetails}>{item.createdAt?.toDate ? new Date(item.createdAt.toDate()).toLocaleDateString('id-ID', {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'}) : '-'} • {item.type}</Text>
+                  <Text style={styles.historyDetails}>
+                    {item.createdAt?.toDate
+                      ? new Date(item.createdAt.toDate()).toLocaleDateString('id-ID', {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'})
+                      : '-'} • {item.type} • {item.cashierName || '-'}
+                  </Text>
                </View>
                <View style={styles.historyTotalBox}>
                   {item.type === 'EARN' ? (
@@ -475,10 +479,33 @@ export default function CashierDashboard() {
   const [selectedHistoryItem, setSelectedHistoryItem] = useState<any>(null);
 
   const storeState: any = useCashierStore();
-  const { staff, syncData, logout, scannedVoucher, setScannedVoucher, redeemVoucher } = storeState;
+  const { staff, activeCashier, isLocked, syncData, logout, scannedVoucher, setScannedVoucher, redeemVoucher, setActiveCashier } = storeState;
   
   const [isRedeeming, setIsRedeeming] = useState(false);
   const [storeName, setStoreName] = useState('Loading Store...');
+
+  // --- Idle auto-lock (PIN required again after inactivity) ---
+  const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+  const lastActivityRef = useRef<number>(Date.now());
+  const bumpActivity = () => { lastActivityRef.current = Date.now(); };
+
+  const handleLockNow = () => {
+    bumpActivity();
+    setActiveCashier(null, true);
+  };
+
+  useEffect(() => {
+    if (!activeCashier || isLocked) return;
+    lastActivityRef.current = Date.now();
+
+    const interval = setInterval(() => {
+      if (Date.now() - lastActivityRef.current >= IDLE_TIMEOUT_MS) {
+        setActiveCashier(null, true);
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [activeCashier?.staffId, isLocked]);
 
   // --- 🔥 STATE REAL-TIME DASHBOARD ---
   const [rawTransactions, setRawTransactions] = useState<any[]>([]);
@@ -1222,7 +1249,11 @@ export default function CashierDashboard() {
                         </View>
                         <View style={styles.historyInfo}>
                           <Text style={styles.historyTrxId} numberOfLines={1}>{item.posTransactionId || item.id}</Text>
-                          <Text style={styles.historyDetails}>{item.time}{item.member ? ` · ${item.member}` : ' · Anonym'}</Text>
+                          <Text style={styles.historyDetails}>
+                            {item.time}
+                            {item.member ? ` · ${item.member}` : ' · Anonym'}
+                            {` · ${item.cashierName || '-'}`}
+                          </Text>
                         </View>
                         <View style={styles.historyTotalBox}>
                           <Text style={styles.historyTotalText}>{item.total}</Text>
@@ -1252,7 +1283,11 @@ export default function CashierDashboard() {
                         </View>
                         <View style={[styles.historyInfo, styles.historyRedeemInfo]}>
                           <Text style={styles.historyRedeemTitle} numberOfLines={1} ellipsizeMode="tail">{item.voucherTitle}</Text>
-                          <Text style={styles.historyRedeemDetails} numberOfLines={1} ellipsizeMode="tail">{item.time}{item.member ? ` · ${item.member}` : ''}</Text>
+                          <Text style={styles.historyRedeemDetails} numberOfLines={1} ellipsizeMode="tail">
+                            {item.time}
+                            {item.member ? ` · ${item.member}` : ''}
+                            {` · ${item.cashierName || '-'}`}
+                          </Text>
                         </View>
                         <View style={styles.historyRedeemBadge}>
                           <Text style={styles.historyRedeemBadgeText}>REDEEM</Text>
@@ -1298,7 +1333,8 @@ export default function CashierDashboard() {
   };
 
   return (
-    <View style={styles.root}>
+    <TouchableWithoutFeedback onPress={bumpActivity} accessible={false}>
+      <View style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={DESIGN.canvas} />
       
       <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -1307,13 +1343,31 @@ export default function CashierDashboard() {
             <Image source={require('../../assets/images/logo1.webp')} style={styles.headerLogo} resizeMode="contain" />
             <View style={styles.headerTextContainer}>
               <Text style={styles.eyebrow}>{getGreeting()}</Text>
-              <Text style={[styles.locationTitle, { fontSize: (staff?.name || 'Staff').length > 20 ? 18 : 22 }]} numberOfLines={1} adjustsFontSizeToFit={true} minimumFontScale={0.7}>{staff?.name || 'Staff'}</Text>
+              <Text style={[styles.locationTitle, { fontSize: storeName.length > 22 ? 18 : 22 }]} numberOfLines={1} adjustsFontSizeToFit={true} minimumFontScale={0.7}>
+                {storeName}
+              </Text>
+              <Text style={styles.cashierNameText} numberOfLines={1}>
+                {`Cashier: ${activeCashier?.name || '-'}`}
+              </Text>
+              <Text style={styles.cashierNoteText} numberOfLines={1}>
+                PIN-verified cashier handle
+              </Text>
             </View>
           </View>
-          <View style={styles.headerRight}>
+          <View style={styles.headerRightRow}>
             <Animated.View style={[styles.statusPill, { backgroundColor: pillBg }]}>
               <Animated.Text style={[styles.statusPillText, { opacity: pillTextOpacity }]}>{pillLabel}</Animated.Text>
             </Animated.View>
+            <Pressable
+              onPress={handleLockNow}
+              style={({ pressed }) => [
+                styles.lockBtn,
+                { opacity: pressed ? 0.85 : 1 },
+              ]}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Lock size={16} color={DESIGN.textPrimary} strokeWidth={3} />
+            </Pressable>
           </View>
         </View>
 
@@ -1473,7 +1527,8 @@ export default function CashierDashboard() {
           </View>
         </Animated.View>
       )}
-    </View>
+      </View>
+    </TouchableWithoutFeedback>
   );
 }
 
@@ -1507,8 +1562,11 @@ const styles = StyleSheet.create({
   headerTextContainer: { flex: 1, justifyContent: 'center' },
   eyebrow: { fontSize: 13, fontWeight: '700', color: DESIGN.textSecondary, letterSpacing: 0.5, marginBottom: 2, textTransform: 'uppercase' },
   locationTitle: { fontWeight: '900', color: DESIGN.textPrimary, letterSpacing: -1 },
-  headerRight: { justifyContent: 'center', alignItems: 'flex-end' },
+  headerRightRow: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 10 },
+  lockBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(211, 35, 42, 0.10)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(211, 35, 42, 0.22)' },
   statusPill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
+  cashierNameText: { marginTop: 6, fontSize: 13, fontWeight: '900', color: DESIGN.textSecondary },
+  cashierNoteText: { fontSize: 11, fontWeight: '600', color: 'rgba(0,0,0,0.35)', marginTop: 2 },
   statusPillText: { color: '#FFF', fontWeight: 'bold', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 },
   
   tabTrackWrapper: { paddingHorizontal: SCREEN_PADDING, marginBottom: 24 },

@@ -9,6 +9,7 @@ import { preloadCriticalAssets, warmSecondaryAssets } from './src/utils/preloadA
 import { useCashierStore } from './src/store/useCashierStore';
 import LoginScreen from './src/screens/LoginScreen';
 import CashierDashboard from './src/screens/CashierDashboard';
+import BlindPinUnlockScreen from './src/screens/BlindPinUnlockScreen';
 
 const MIN_SPLASH_MS = 350;
 const MAX_PRELOAD_WAIT_MS = 300;
@@ -20,7 +21,8 @@ export default function App() {
   const splashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 🔥 ZUSTAND FIREBASE LISTENER (Pengganti StaffAuthProvider)
-  const { isAuthenticated, isLoadingAuth, initializeAuth } = useCashierStore();
+  const { isAuthenticated, isLoadingAuth, initializeAuth, activeCashier, isLocked } =
+    useCashierStore();
 
   useEffect(() => {
     // Jalankan listener Firebase saat aplikasi dibuka
@@ -114,7 +116,7 @@ export default function App() {
         translucent={Platform.OS === 'android'}
         backgroundColor="transparent"
       />
-      {isAuthenticated ? <CashierDashboard /> : <LoginScreen />}
+      {isAuthenticated ? (!activeCashier || isLocked ? <BlindPinUnlockScreen /> : <CashierDashboard />) : <LoginScreen />}
     </SafeAreaProvider>
   );
 }

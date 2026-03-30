@@ -72,6 +72,8 @@ const recordCashierEarnTransaction = httpsCallable<
     uid: string | null;
     memberId?: string;
     memberName?: string;
+    staffId: string;
+    passcode: string;
     storeId: string;
     storeName: string;
   },
@@ -83,6 +85,8 @@ const recordCashierRedeemTransaction = httpsCallable<
     receiptNumber: string;
     storeId: string;
     storeName: string;
+    staffId: string;
+    passcode: string;
     userId: string;
     memberId: string;
     memberName: string;
@@ -114,6 +118,7 @@ export const TransactionService = {
     memberId?: string;
     memberName?: string;
     staffId: string;
+    passcode: string;
     cashierName?: string;
     storeId: string;
     storeName: string;
@@ -126,6 +131,8 @@ export const TransactionService = {
         uid: data.uid?.trim() || null,
         memberId: data.memberId?.trim() || undefined,
         memberName: data.memberName?.trim() || undefined,
+        staffId: data.staffId.trim(),
+        passcode: data.passcode.trim(),
         storeId: data.storeId.trim(),
         storeName: data.storeName.trim(),
       };
@@ -146,6 +153,7 @@ export const TransactionService = {
   async recordRedeemClaim(data: {
     receiptNumber: string;
     staffId: string;
+    passcode: string;
     cashierName?: string;
     storeId: string;
     storeName: string;
@@ -160,6 +168,8 @@ export const TransactionService = {
         receiptNumber: data.receiptNumber.trim(),
         storeId: data.storeId.trim(),
         storeName: data.storeName.trim(),
+        staffId: data.staffId.trim(),
+        passcode: data.passcode.trim(),
         userId: data.userId.trim(),
         memberId: data.memberId.trim(),
         memberName: data.memberName.trim(),

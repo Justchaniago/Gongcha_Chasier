@@ -14,11 +14,31 @@ const db = getFirestore("gongcha-ver001");
 const REGION = "asia-southeast2";
 const CASHIER_WRITE_ROLES = ["STAFF", "SUPER_ADMIN"];
 
+interface CashierProfile {
+  staffId?: string;
+  name?: string;
+  passcode?: string;
+  role?: "STAFF" | "MANAGER" | "ADMIN" | string;
+}
+
+interface ManageStoreStaffPayload {
+  targetUid: string; // admin_users/{uid} doc uid (store document)
+  action: "add" | "remove";
+  cashier?: {
+    staffId: string;
+    name: string;
+    passcode: string;
+    role: "STAFF" | "MANAGER" | "ADMIN";
+  };
+  staffIdToRemove?: string; // required when action === "remove"
+}
+
 interface AdminUserData {
   name?: string;
   role?: string;
   isActive?: boolean;
   assignedStoreId?: string | null;
+  cashiers?: CashierProfile[];
 }
 
 interface DailyStatUpdate {
@@ -38,6 +58,8 @@ interface CashierEarnPayload {
   uid?: string | null;
   memberId?: string;
   memberName?: string;
+  staffId?: string;
+  passcode?: string;
   storeId: string;
   storeName?: string;
 }
@@ -46,6 +68,8 @@ interface CashierRedeemPayload {
   receiptNumber: string;
   storeId: string;
   storeName?: string;
+  staffId?: string;
+  passcode?: string;
   userId: string;
   memberId: string;
   memberName?: string;
@@ -98,7 +122,9 @@ const getTransactionRef = (transactionId: string) =>
 
 const authorizeCashierWrite = async (
   authUid: string,
-  requestedStoreId: string
+  requestedStoreId: string,
+  requestedCashierStaffId?: string,
+  requestedCashierPasscode?: string
 ) => {
   const adminSnap = await getAdminUserRef(authUid).get();
   if (!adminSnap.exists) {
@@ -113,17 +139,9 @@ const authorizeCashierWrite = async (
     throw new HttpsError("permission-denied", "Staff account is inactive.");
   }
 
-  const normalizedRole = normalizeRole(adminData.role);
-  if (!CASHIER_WRITE_ROLES.includes(normalizedRole)) {
-    throw new HttpsError(
-      "permission-denied",
-      "Current role is not allowed to submit cashier writes."
-    );
-  }
-
   const assignedStoreId = normalizeString(adminData.assignedStoreId);
   if (
-    normalizedRole !== "SUPER_ADMIN" &&
+    normalizeRole(adminData.role) !== "SUPER_ADMIN" &&
     assignedStoreId !== requestedStoreId
   ) {
     throw new HttpsError(
@@ -132,13 +150,177 @@ const authorizeCashierWrite = async (
     );
   }
 
+  const normalizedAdminRole = normalizeRole(adminData.role);
+
+  // New model: cashiers are stored in admin_users/{uid}.cashiers.
+  // If the `cashiers` field exists (even if empty), we enforce PIN validation.
+  const hasCashiersArray = Array.isArray(adminData.cashiers);
+  if (hasCashiersArray) {
+    const cashiers = adminData.cashiers as CashierProfile[];
+    const cashierStaffId = normalizeString(requestedCashierStaffId);
+    const cashierPasscode = normalizeString(requestedCashierPasscode);
+    if (!cashierStaffId || !cashierPasscode) {
+      throw new HttpsError(
+        "permission-denied",
+        "Cashier staffId and passcode are required."
+      );
+    }
+
+    const cashier = cashiers.find(
+      (c) => normalizeString(c.staffId) === cashierStaffId
+    );
+    if (!cashier) {
+      throw new HttpsError("permission-denied", "Cashier profile not found.");
+    }
+
+    if (normalizeString(cashier.passcode) !== cashierPasscode) {
+      throw new HttpsError("permission-denied", "Invalid cashier passcode.");
+    }
+
+    const cashierRole =
+      typeof cashier.role === "string" ? cashier.role.toUpperCase() : "STAFF";
+    if (!["STAFF", "MANAGER", "ADMIN"].includes(cashierRole)) {
+      throw new HttpsError("permission-denied", "Cashier role is not allowed.");
+    }
+
+    return {
+      staffId: cashierStaffId,
+      cashierName: normalizeString(cashier.name) || "Cashier",
+      role: cashierRole,
+      assignedStoreId,
+    };
+  }
+
+  // Legacy model: admin_users/{uid} role is used directly for authorization.
+  if (!CASHIER_WRITE_ROLES.includes(normalizedAdminRole)) {
+    throw new HttpsError(
+      "permission-denied",
+      "Current role is not allowed to submit cashier writes."
+    );
+  }
+
   return {
-    uid: authUid,
-    name: normalizeString(adminData.name) || "Staff",
-    role: normalizedRole,
+    staffId: authUid,
+    cashierName: normalizeString(adminData.name) || "Staff",
+    role: normalizedAdminRole,
     assignedStoreId,
   };
 };
+
+export const manageStoreStaff = onCall<ManageStoreStaffPayload>(
+  {region: REGION},
+  async (request) => {
+    if (!request.auth?.uid) {
+      throw new HttpsError("unauthenticated", "Authentication is required.");
+    }
+
+    const callerUid = request.auth.uid;
+    const targetUid = normalizeString(request.data.targetUid);
+    const action = request.data.action;
+
+    if (!targetUid) {
+      throw new HttpsError("invalid-argument", "targetUid is required.");
+    }
+    if (action !== "add" && action !== "remove") {
+      throw new HttpsError("invalid-argument", "action must be add or remove.");
+    }
+
+    const callerSnap = await getAdminUserRef(callerUid).get();
+    if (!callerSnap.exists) {
+      throw new HttpsError(
+        "permission-denied",
+        "Admin profile not found for current user."
+      );
+    }
+
+    const callerData = callerSnap.data() as AdminUserData;
+    const callerRoleRaw =
+      typeof callerData.role === "string" ? callerData.role.toUpperCase() : "";
+    if (!["ADMIN", "SUPER_ADMIN"].includes(callerRoleRaw)) {
+      throw new HttpsError(
+        "permission-denied",
+        "Only ADMIN or SUPER_ADMIN can manage store cashiers."
+      );
+    }
+
+    if (callerRoleRaw !== "SUPER_ADMIN" && targetUid !== callerUid) {
+      throw new HttpsError(
+        "permission-denied",
+        "Non-super admins can only manage their own store document."
+      );
+    }
+
+    const targetRef = getAdminUserRef(targetUid);
+
+    await db.runTransaction(async (trx) => {
+      const targetSnap = await trx.get(targetRef);
+      if (!targetSnap.exists) {
+        throw new HttpsError("not-found", "Target store document not found.");
+      }
+
+      const targetData = targetSnap.data() as AdminUserData;
+      const currentCashiers =
+        Array.isArray(targetData.cashiers) ? targetData.cashiers : [];
+
+      if (action === "add") {
+        const cashier = request.data.cashier;
+        if (!cashier) {
+          throw new HttpsError(
+            "invalid-argument",
+            "cashier is required for action=add."
+          );
+        }
+
+        const staffId = normalizeString(cashier.staffId);
+        const name = normalizeString(cashier.name);
+        const passcode = normalizeString(cashier.passcode);
+        const role = cashier.role;
+
+        if (!staffId || !name || !passcode) {
+          throw new HttpsError(
+            "invalid-argument",
+            "cashier.staffId, cashier.name, and cashier.passcode are required."
+          );
+        }
+        const normalizedCashierRole = String(role).toUpperCase();
+        if (!["STAFF", "MANAGER", "ADMIN"].includes(normalizedCashierRole)) {
+          throw new HttpsError(
+            "invalid-argument",
+            "cashier.role is not allowed."
+          );
+        }
+
+        const filtered = currentCashiers.filter(
+          (c) => normalizeString(c.staffId) !== staffId
+        );
+        filtered.push({
+          staffId,
+          name,
+          passcode,
+          role: String(role).toUpperCase(),
+        });
+
+        trx.set(targetRef, {cashiers: filtered}, {merge: true});
+      } else {
+        const staffIdToRemove = normalizeString(request.data.staffIdToRemove);
+        if (!staffIdToRemove) {
+          throw new HttpsError(
+            "invalid-argument",
+            "staffIdToRemove is required for action=remove."
+          );
+        }
+
+        const filtered = currentCashiers.filter(
+          (c) => normalizeString(c.staffId) !== staffIdToRemove
+        );
+
+        trx.set(targetRef, {cashiers: filtered}, {merge: true});
+      }
+    });
+
+    return {ok: true};
+  }
+);
 
 const ensureTransactionDoesNotExist = async (
   transaction: Transaction,
@@ -216,7 +398,12 @@ export const recordCashierEarnTransaction = onCall<
       throw new HttpsError("invalid-argument", "Store id is required.");
     }
 
-    const staff = await authorizeCashierWrite(request.auth.uid, storeId);
+    const cashier = await authorizeCashierWrite(
+      request.auth.uid,
+      storeId,
+      request.data.staffId,
+      request.data.passcode
+    );
     const transactionId = buildTransactionId(receiptNumber);
     const transactionRef = getTransactionRef(transactionId);
     const userRef = normalizedUid ? getUserRef(normalizedUid) : null;
@@ -252,8 +439,8 @@ export const recordCashierEarnTransaction = onCall<
         userId: normalizedUid,
         memberId,
         memberName,
-        staffId: staff.uid,
-        cashierName: staff.name,
+        staffId: cashier.staffId,
+        cashierName: cashier.cashierName,
         storeId,
         storeName,
         status: isEligibleLoyaltyEarn ? "PENDING" : "COMPLETED",
@@ -308,7 +495,12 @@ export const recordCashierRedeemTransaction = onCall<
       throw new HttpsError("invalid-argument", "Voucher code is required.");
     }
 
-    const staff = await authorizeCashierWrite(request.auth.uid, storeId);
+    const cashier = await authorizeCashierWrite(
+      request.auth.uid,
+      storeId,
+      request.data.staffId,
+      request.data.passcode
+    );
     const transactionId = `REDEEM-${receiptNumber}`;
     const transactionRef = getTransactionRef(transactionId);
     const userRef = getUserRef(userId);
@@ -386,8 +578,8 @@ export const recordCashierRedeemTransaction = onCall<
         userId,
         memberId,
         memberName: resolvedMemberName,
-        staffId: staff.uid,
-        cashierName: staff.name,
+        staffId: cashier.staffId,
+        cashierName: cashier.cashierName,
         storeId,
         storeName,
         status: "COMPLETED",

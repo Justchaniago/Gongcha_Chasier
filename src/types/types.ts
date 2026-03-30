@@ -6,6 +6,15 @@
 export type AdminRole = "SUPER_ADMIN" | "STAFF" | "admin" | "master" | "manager";
 
 // Representasi dari collection 'admin_users' / 'Staff' di Web Panel
+export type CashierRole = "STAFF" | "MANAGER" | "ADMIN";
+
+export interface CashierProfile {
+  staffId: string;
+  name: string;
+  passcode: string;
+  role: CashierRole;
+}
+
 export interface StaffProfile {
   uid: string; // Aligned dengan web panel (sebelumnya id)
   name: string;
@@ -13,6 +22,7 @@ export interface StaffProfile {
   role: AdminRole;
   assignedStoreId: string | null;
   isActive?: boolean;
+  cashiers: CashierProfile[];
 }
 
 // ============================================================================
