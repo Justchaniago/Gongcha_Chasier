@@ -15,6 +15,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { useCashierStore } from '../store/useCashierStore';
 import { doc, getDoc, getDocs, collection, query, where, onSnapshot } from 'firebase/firestore';
 import { firestoreDb } from '../config/firebase';
+import { TransactionService } from '../services/TransactionService';
 
 const { width, height } = Dimensions.get('window');
 

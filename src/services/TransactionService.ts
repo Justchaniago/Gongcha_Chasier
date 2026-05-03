@@ -6,65 +6,44 @@ import {
   Timestamp,
   where,
 } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
-import { firestoreDb, firebaseFunctions } from '../config/firebase';
+import { firestoreDb } from '../config/firebase';
 import { TransactionRecord } from '../types/types';
-
-const getErrorCode = (error: any) =>
-  typeof error?.code === 'string' ? error.code.replace(/^functions\//, '') : '';
-
-const getErrorMessage = (error: any) =>
-  typeof error?.message === 'string' ? error.message : '';
+import { postTransaction, TransactionRequest } from './backendApi';
 
 const buildEarnTransactionError = (error: any, receiptNumber: string) => {
-  const code = getErrorCode(error);
-  const rawMessage = getErrorMessage(error);
+  const msg = error instanceof Error ? error.message : String(error);
 
-  if (code === 'already-exists' || /already exists/i.test(rawMessage)) {
+  if (/duplicate|already exists/i.test(msg)) {
     return {
       shouldLogAsError: false,
       message: `Transaksi dengan ID ${receiptNumber} sudah pernah diinput. Cek riwayat transaksi sebelum input ulang.`,
     };
   }
 
-  if (code === 'permission-denied') {
-    const lowered = rawMessage.toLowerCase();
-
-    if (
-      lowered.includes('cashier profile not found') ||
-      lowered.includes('invalid cashier passcode') ||
-      lowered.includes('cashier staffid and passcode')
-    ) {
-      return {
-        shouldLogAsError: false,
-        message: 'Sesi kasir tidak valid. Pilih kasir yang benar lalu login ulang PIN kasir.',
-      };
-    }
-
+  if (/not authenticated|permission|unauthorized/i.test(msg)) {
     return {
       shouldLogAsError: false,
-      message: 'Akun kasir ini belum punya izin untuk mencatat transaksi di store ini.',
+      message: 'Sesi kasir tidak valid. Pilih kasir yang benar lalu login ulang PIN kasir.',
     };
   }
 
   return {
     shouldLogAsError: true,
-    message: rawMessage || 'Gagal mencatat transaksi. Silakan coba lagi.',
+    message: msg || 'Gagal mencatat transaksi. Silakan coba lagi.',
   };
 };
 
 const buildRedeemTransactionError = (error: any, voucherCode: string) => {
-  const code = getErrorCode(error);
-  const rawMessage = getErrorMessage(error);
+  const msg = error instanceof Error ? error.message : String(error);
 
-  if (code === 'already-exists' || /already exists/i.test(rawMessage)) {
+  if (/already|duplicate/i.test(msg)) {
     return {
       shouldLogAsError: false,
       message: `Redeem untuk voucher ${voucherCode} sudah pernah dicatat sebelumnya.`,
     };
   }
 
-  if (code === 'failed-precondition' && /already been used/i.test(rawMessage)) {
+  if (/already been used/i.test(msg)) {
     return {
       shouldLogAsError: false,
       message: `Voucher ${voucherCode} sudah pernah digunakan sebelumnya.`,
@@ -73,41 +52,9 @@ const buildRedeemTransactionError = (error: any, voucherCode: string) => {
 
   return {
     shouldLogAsError: true,
-    message: rawMessage || 'Gagal mencatat redeem voucher. Silakan coba lagi.',
+    message: msg || 'Gagal mencatat redeem voucher. Silakan coba lagi.',
   };
 };
-
-const recordCashierEarnTransaction = httpsCallable<
-  {
-    receiptNumber: string;
-    totalAmount: number;
-    potentialPoints: number;
-    uid: string | null;
-    memberId?: string;
-    memberName?: string;
-    staffId: string;
-    passcode: string;
-    storeId: string;
-    storeName: string;
-  },
-  { transactionId: string }
->(firebaseFunctions, 'recordCashierEarnTransaction');
-
-const recordCashierRedeemTransaction = httpsCallable<
-  {
-    receiptNumber: string;
-    storeId: string;
-    storeName: string;
-    staffId: string;
-    passcode: string;
-    userId: string;
-    memberId: string;
-    memberName: string;
-    voucherCode: string;
-    voucherTitle: string;
-  },
-  { transactionId: string }
->(firebaseFunctions, 'recordCashierRedeemTransaction');
 
 export const TransactionService = {
   async hasTodayReceipt(storeId: string, receiptNumber: string) {
@@ -137,21 +84,24 @@ export const TransactionService = {
     storeName: string;
   }) {
     try {
-      const payload = {
+      const payload: TransactionRequest = {
         receiptNumber: data.receiptNumber.trim(),
         totalAmount: data.totalAmount,
-        potentialPoints: data.potentialPoints,
-        uid: data.uid?.trim() || null,
-        memberId: data.memberId?.trim() || undefined,
-        memberName: data.memberName?.trim() || undefined,
+        memberId: data.memberId?.trim(),
+        memberName: data.memberName?.trim(),
         staffId: data.staffId.trim(),
-        passcode: data.passcode.trim(),
         storeId: data.storeId.trim(),
         storeName: data.storeName.trim(),
+        type: 'earn',
       };
 
-      const result = await recordCashierEarnTransaction(payload);
-      return result.data.transactionId;
+      const result = await postTransaction(payload);
+
+      if (!result.success) {
+        throw new Error(result.error || 'Transaction failed');
+      }
+
+      return result.transactionId;
     } catch (error) {
       const handled = buildEarnTransactionError(error, data.receiptNumber.trim());
       if (handled.shouldLogAsError) {
@@ -177,21 +127,26 @@ export const TransactionService = {
     voucherTitle: string;
   }) {
     try {
-      const payload = {
+      const payload: TransactionRequest = {
         receiptNumber: data.receiptNumber.trim(),
         storeId: data.storeId.trim(),
         storeName: data.storeName.trim(),
         staffId: data.staffId.trim(),
-        passcode: data.passcode.trim(),
-        userId: data.userId.trim(),
         memberId: data.memberId.trim(),
         memberName: data.memberName.trim(),
+        type: 'redeem',
         voucherCode: data.voucherCode.trim(),
         voucherTitle: data.voucherTitle.trim(),
+        totalAmount: 0,
       };
 
-      const result = await recordCashierRedeemTransaction(payload);
-      return result.data.transactionId;
+      const result = await postTransaction(payload);
+
+      if (!result.success) {
+        throw new Error(result.error || 'Redeem failed');
+      }
+
+      return result.transactionId;
     } catch (error) {
       const handled = buildRedeemTransactionError(error, data.voucherCode.trim());
       if (handled.shouldLogAsError) {
