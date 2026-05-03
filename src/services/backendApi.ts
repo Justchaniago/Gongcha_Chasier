@@ -50,11 +50,29 @@ export async function postTransaction(
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Transaction failed');
+      const contentType = response.headers.get('content-type');
+      let errorMsg = 'Transaction failed';
+
+      try {
+        if (contentType?.includes('application/json')) {
+          const error = await response.json();
+          errorMsg = error.error || errorMsg;
+        } else {
+          errorMsg = `Backend error (${response.status}): ${response.statusText}`;
+        }
+      } catch (e) {
+        errorMsg = `Backend error (${response.status}): ${response.statusText}`;
+      }
+
+      throw new Error(errorMsg);
     }
 
-    return await response.json();
+    try {
+      return await response.json();
+    } catch (e) {
+      console.error('Failed to parse response JSON:', e);
+      throw new Error('Invalid response from backend');
+    }
   } catch (error) {
     console.error('Backend API error:', error);
     throw error;
