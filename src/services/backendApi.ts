@@ -57,13 +57,16 @@ export async function postTransaction(
 
     if (!response.ok) {
       const contentType = response.headers.get('content-type');
-      let errorMsg = 'Transaction failed';
+      let errorMsg = `Backend error (${response.status})`;
 
       try {
         if (contentType?.includes('application/json')) {
-          const error = await response.json();
-          errorMsg = error.error || errorMsg;
+          const errorBody = await response.json();
+          console.log('[backendApi] Error body:', JSON.stringify(errorBody));
+          errorMsg = errorBody.error || errorBody.message || errorMsg;
         } else {
+          const text = await response.text();
+          console.log('[backendApi] Error body (text):', text.substring(0, 200));
           errorMsg = `Backend error (${response.status}): ${response.statusText}`;
         }
       } catch (e) {
