@@ -290,7 +290,7 @@ export const useCashierStore = create<CashierState>((set, get) => ({
       }));
     } catch (error: any) {
       console.info("Redeem voucher blocked:", error?.message || error);
-      throw new Error(error?.message || "Redeem voucher gagal disimpan ke Firebase.");
+      throw error;
     }
   },
 
