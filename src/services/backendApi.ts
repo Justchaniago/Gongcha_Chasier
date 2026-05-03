@@ -41,6 +41,7 @@ export async function postTransaction(
     const idToken = await user.getIdToken();
 
     console.log('[backendApi] Calling:', `${BACKEND_URL}/transactions`);
+    console.log('[backendApi] Firebase Auth UID (token owner):', user.uid);
     console.log('[backendApi] Token length:', idToken.length);
     console.log('[backendApi] Payload:', data);
 
