@@ -3,8 +3,8 @@
 **Objective:** Route transactions through Admin Panel Backend API for server-authoritative processing.
 
 **Current Branch:** develope-fase1  
-**Status:** IN PROGRESS  
-**Last Updated:** 2026-05-03
+**Status:** ✅ PHASE B COMPLETE  
+**Last Updated:** 2026-05-03 (Final)
 
 ---
 
@@ -100,16 +100,64 @@ REACT_APP_BACKEND_URL=http://localhost:5001/gongcha-app-4691f/us-central1
 
 ---
 
-## Blockers
+## ✅ Resolved Blockers
 
-None. Code compiles. Ready for Admin Panel backend to be deployed.
+### 🔧 Blocker 1: Backend 401 Unauthorized (FIXED)
+- **Issue:** Backend rejected cashier Firebase tokens
+- **Fix:** Auth middleware updated to accept STAFF role
+- **Status:** ✅ RESOLVED
+
+### 🔧 Blocker 2: Cloud Function IAM (FIXED)
+- **Issue:** Function not invokable (Google-level 401)
+- **Fix:** IAM policy updated (allUsers + cloudfunctions.invoker)
+- **Status:** ✅ RESOLVED
+
+### 🔧 Blocker 3: Firestore Database (FIXED)
+- **Issue:** Cloud Functions querying (default) DB instead of gongcha-ver001
+- **Fix:** Updated all getFirestore() calls to specify gongcha-ver001
+- **Status:** ✅ RESOLVED
+
+### 🔧 Blocker 4: Composite Index Missing (FIXED)
+- **Issue:** Query requires index (memberId, status, type, createdAt)
+- **Fix:** Index created in Firestore
+- **Status:** ✅ RESOLVED
+
+---
+
+## Final Summary
+
+### ✅ Cashier App Integration Complete
+
+**What Changed:**
+- Migrated from Cashier App's own Cloud Functions to Admin Panel Backend API
+- All transactions now routed through `/transactions` endpoint
+- Server-authoritative: points, tier, voucher logic centralized in Admin Panel
+
+**Testing Results:**
+- ✅ EARN flow: Creates transaction (PENDING), points held for admin approval
+- ✅ REDEEM flow: Creates transaction (PENDING), voucher held for admin approval
+- ✅ Error handling: Descriptive JSON responses
+- ✅ Auth: Firebase token verified, STAFF role check passing
+- ✅ Database: Queries hitting gongcha-ver001 correctly
+
+**Points Behavior (Working as Designed):**
+- Transaction shows `pointsEarned: 50` in response
+- Member's `points` field NOT updated immediately (PENDING)
+- Admin approves in web admin → points added + member sees change
+- This is correct behavior per spec
+
+**Ready for Production:**
+- No further Cashier App changes needed
+- Admin Panel Phase C (Security Rules lockdown) can proceed
+- All inter-service communication working
 
 ---
 
 ## Notes
 
-- Cashier App now routes ALL transactions through Admin Panel backend
-- Error handling adapted from Cloud Function errors to HTTP errors
-- Firebase token passed in Authorization header for auth
-- Backend must validate staff permissions (passcode validation moved to backend)
-- Voucher atomicity guaranteed by backend (no local updates needed)
+- Cashier App routes ALL transactions through Admin Panel backend (no direct Firestore writes)
+- Error handling adapted from Cloud Functions to HTTP/JSON format
+- Firebase token passed in Authorization header for authentication
+- Backend performs server-authoritative validation (staff, points, tier, vouchers)
+- Voucher atomicity guaranteed by backend (no orphaned vouchers)
+- Points are held until admin approval (security + audit trail)
