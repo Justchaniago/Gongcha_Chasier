@@ -40,6 +40,10 @@ export async function postTransaction(
 
     const idToken = await user.getIdToken();
 
+    console.log('[backendApi] Calling:', `${BACKEND_URL}/transactions`);
+    console.log('[backendApi] Token length:', idToken.length);
+    console.log('[backendApi] Payload:', data);
+
     const response = await fetch(`${BACKEND_URL}/transactions`, {
       method: 'POST',
       headers: {
@@ -48,6 +52,8 @@ export async function postTransaction(
       },
       body: JSON.stringify(data),
     });
+
+    console.log('[backendApi] Response status:', response.status, response.statusText);
 
     if (!response.ok) {
       const contentType = response.headers.get('content-type');

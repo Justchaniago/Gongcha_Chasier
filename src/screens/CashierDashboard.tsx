@@ -288,7 +288,11 @@ const MemberDetailPage = ({ visible, onClose, onShowAlert }: { visible: boolean,
   return (
     <Animated.View style={[styles.pageContainer, { transform: [{ translateX: slideAnim }] }, !visible ? { pointerEvents: 'none' } : {} ]}>
       <Animated.View style={[styles.pageBackground, { opacity: bgOpacity }]} />
-      <View style={[styles.floatingHeader, { top: insets.top + 10 }]}> <Pressable style={styles.floatingBackPill} onPress={onClose}><ArrowLeft size={20} color={DESIGN.textPrimary} strokeWidth={2.5} /></Pressable></View>
+      <View style={[styles.floatingHeader, { top: insets.top + 10 }]}>
+        <Pressable style={styles.floatingBackPill} onPress={onClose}>
+          <ArrowLeft size={20} color={DESIGN.textPrimary} strokeWidth={2.5} />
+        </Pressable>
+      </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.pageScroll, { paddingTop: insets.top + 80, paddingBottom: insets.bottom + 140 }]} keyboardShouldPersistTaps="handled">
         <View style={styles.digitalCard}>
