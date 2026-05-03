@@ -55,14 +55,61 @@
 
 ---
 
+## Next Steps
+
+### ⏳ Create .env.local (Manual)
+`.env.local` is not committed (in .gitignore). Create manually:
+```bash
+REACT_APP_BACKEND_URL=https://us-central1-gongcha-app-4691f.cloudfunctions.net
+```
+
+For local dev (Admin Panel emulator):
+```bash
+REACT_APP_BACKEND_URL=http://localhost:5001/gongcha-app-4691f/us-central1
+```
+
+### ⏳ Verify Admin Panel Backend
+- Backend must be deployed: `cd gongcha-adminnew/functions && npm run build && firebase deploy --only functions`
+- Check that `/transactions` endpoint is available
+- Verify auth middleware validates Firebase tokens
+
+### ⏳ Run Cashier App Tests
+- Run: `npm start`
+- Test EARN flow: scan member → enter amount → confirm
+- Test REDEEM flow: scan voucher → confirm
+- Check Firestore `activity_logs` collection for transaction entries
+
+---
+
+## Code Changes Summary
+
+### src/services/backendApi.ts (NEW)
+- HTTP client for Admin Panel `/transactions` endpoint
+- Handles Firebase auth token injection
+- Typed request/response interfaces
+
+### src/services/TransactionService.ts (MODIFIED)
+- Removed `httpsCallable` imports
+- Removed Cloud Function definitions
+- Updated `recordTransactionClaim()` → `postTransaction()` (earn)
+- Updated `recordRedeemClaim()` → `postTransaction()` (redeem)
+- Simplified error handling for HTTP errors
+
+### src/screens/CashierDashboard.tsx (MODIFIED)
+- Added `TransactionService` import
+
+---
+
 ## Blockers
 
-None yet. Ready to proceed.
+None. Code compiles. Ready for Admin Panel backend to be deployed.
 
 ---
 
 ## Notes
 
-- Cashier App uses Cloud Functions currently. Switching to HTTP API for centralization.
-- Error handling will change: from Cloud Function errors to HTTP errors.
-- Token handling: Firebase auth token passed in Authorization header.
+- Cashier App now routes ALL transactions through Admin Panel backend
+- Error handling adapted from Cloud Function errors to HTTP errors
+- Firebase token passed in Authorization header for auth
+- Backend must validate staff permissions (passcode validation moved to backend)
+- Voucher atomicity guaranteed by backend (no local updates needed)
