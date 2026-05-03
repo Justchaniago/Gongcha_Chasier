@@ -161,3 +161,62 @@ REACT_APP_BACKEND_URL=http://localhost:5001/gongcha-app-4691f/us-central1
 - Backend performs server-authoritative validation (staff, points, tier, vouchers)
 - Voucher atomicity guaranteed by backend (no orphaned vouchers)
 - Points are held until admin approval (security + audit trail)
+
+---
+
+## Firestore Access Audit (for Stage 3 scope planning)
+
+### Q1: Direct Firestore Writes (Post-Migration)
+**Expected:** None (all transactions via postTransaction() API)
+
+**Found:**
+1. ✅ `AuthService.ts:63` - `setDoc(users/{uid})` → Member profile creation (signup)
+   - **Status:** ACCEPTABLE (not transaction-related)
+   
+2. ✅ `AuthService.ts:106` - `setDoc(users/{uid})` → Profile data cleanup
+   - **Status:** ACCEPTABLE (legacy data fix)
+   
+3. ✅ `RewardSeeder.ts:24` - `setDoc(rewards_catalog)` → Seeding utility
+   - **Status:** ACCEPTABLE (admin utility, not production)
+
+**Transactions:** ✅ ZERO direct writes (all via postTransaction() API)
+
+---
+
+### Q2: Collections Read Directly
+
+| Collection | Purpose | Via API? | Notes |
+|-----------|---------|----------|-------|
+| `/transactions` | Load history display | ✅ READ-ONLY | Dashboard history tab |
+| `/users` | Load member profile/loyalty | ✅ READ-ONLY | Member detail display |
+| `/admin_users` | Load staff/cashier info | ✅ READ-ONLY | Staff lookup |
+| `/stores` | Store selector | ✅ READ-ONLY | Reference data |
+| `/products` | Menu display | ✅ READ-ONLY | Reference data |
+| `/rewards_catalog` | Reward browsing | ✅ READ-ONLY | Reference data |
+
+---
+
+### Q3: Sensitive Collections Check
+
+| Collection | Accessed? | Risk |
+|-----------|-----------|------|
+| `/users` | ✅ READ-ONLY | ✅ Safe (display only) |
+| `/transactions` | ✅ READ-ONLY | ✅ Safe (history display) |
+| `/vouchers` | ❌ No | ✅ Safe (embedded in users.vouchers) |
+| `/activity_logs` | ❌ No | ✅ Safe (backend-write only, Cashier can't read) |
+| `/admin_users` | ✅ READ-ONLY | ✅ Safe (staff lookup only) |
+
+**Assessment:** ✅ LOW RISK - All reads are reference/display data. No sensitive writes.
+
+---
+
+### Stage 3 Firestore Rules Recommendation
+
+**Priority (Admin Panel workspace):**
+
+1. **transactions** → API writes only
+2. **users.points** → API writes only (protect from direct updates)
+3. **activity_logs** → Backend writes only (audit isolation)
+4. **admin_users** → No app writes (admin-created only)
+
+**Cashier App reads** can remain direct (read-only, non-sensitive data).
