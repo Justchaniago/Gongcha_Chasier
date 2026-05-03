@@ -206,6 +206,16 @@ export const useCashierStore = create<CashierState>((set, get) => ({
     if (!staff) throw new Error("Staff not logged in");
     if (!activeCashier) throw new Error("Active cashier not selected.");
     if (isLocked) throw new Error("Cashier is locked. Please unlock first.");
+    const normalizedStoreId = (staff.assignedStoreId || "").trim();
+    const normalizedStoreName = normalizedStoreId || "UNKNOWN";
+    const normalizedStaffId = (activeCashier.staffId || "").trim();
+    const normalizedPasscode = (activeCashier.passcode || "").trim();
+    if (!normalizedStoreId) {
+      throw new Error("Store kasir belum terdaftar. Hubungi admin.");
+    }
+    if (!normalizedStaffId || !normalizedPasscode) {
+      throw new Error("Sesi kasir tidak valid. Login ulang PIN kasir.");
+    }
     const normalizedReceipt = posId.trim();
     if (!normalizedReceipt) {
       throw new Error("Nomor receipt wajib diisi.");
@@ -224,11 +234,11 @@ export const useCashierStore = create<CashierState>((set, get) => ({
       uid: useMember && activeMember ? activeMember.uid : null,
       memberId: useMember && activeMember ? activeMember.uid : undefined,
       memberName: useMember && activeMember ? activeMember.name : undefined,
-      staffId: activeCashier.staffId,
+      staffId: normalizedStaffId,
       cashierName: activeCashier.name,
-      passcode: activeCashier.passcode,
-      storeId: staff.assignedStoreId || "UNKNOWN",
-      storeName: staff.assignedStoreId || "UNKNOWN",
+      passcode: normalizedPasscode,
+      storeId: normalizedStoreId,
+      storeName: normalizedStoreName,
     });
     
     set((state) => ({
@@ -245,17 +255,27 @@ export const useCashierStore = create<CashierState>((set, get) => ({
       throw new Error("Data redeem belum lengkap.");
     }
     if (isLocked) throw new Error("Cashier is locked. Please unlock first.");
+    const normalizedStoreId = (staff.assignedStoreId || "").trim();
+    const normalizedStoreName = normalizedStoreId || "UNKNOWN";
+    const normalizedStaffId = (activeCashier.staffId || "").trim();
+    const normalizedPasscode = (activeCashier.passcode || "").trim();
+    if (!normalizedStoreId) {
+      throw new Error("Store kasir belum terdaftar. Hubungi admin.");
+    }
+    if (!normalizedStaffId || !normalizedPasscode) {
+      throw new Error("Sesi kasir tidak valid. Login ulang PIN kasir.");
+    }
 
     const updatedVouchers = markVoucherAsUsed(activeMember.vouchers, scannedVoucher);
 
     try {
       await TransactionService.recordRedeemClaim({
         receiptNumber: scannedVoucher.code,
-        staffId: activeCashier.staffId,
+        staffId: normalizedStaffId,
         cashierName: activeCashier.name,
-        passcode: activeCashier.passcode,
-        storeId: staff.assignedStoreId || "UNKNOWN",
-        storeName: staff.assignedStoreId || "UNKNOWN",
+        passcode: normalizedPasscode,
+        storeId: normalizedStoreId,
+        storeName: normalizedStoreName,
         userId: activeMember.uid,
         memberId: activeMember.uid,
         memberName: activeMember.name,

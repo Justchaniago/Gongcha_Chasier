@@ -1,1 +1,14 @@
-# TODO: Fix Firebase Firestore 404 Error\n\n## Steps to Complete:\n\n1. ✅ Create TODO.md with steps\n2. ✅ Edit functions/src/index.ts (trigger on gongcha-ver001/transactions)\n3. ✅ Build Functions\n4. Deploy Functions: `firebase deploy --only functions`\n5. ✅ Task complete - 404 fixed by removing firestore.database config forcing default DB check.\n\nFirestore now uses named DB gongcha-ver001; Functions deploy successfully.
+# TODO: Fix add transaksi gagal verifikasi id receipt
+
+## Steps to Complete:
+
+1. ✅ Create/update TODO.md with current fix plan
+2. ✅ Edit `functions/src/index.ts`
+   - ✅ Safe fallback on `authorizeCashierWrite` for legacy/admin flow
+   - ✅ Improve explicit auth error messages for cashier credential mismatch
+3. ✅ Edit `src/services/TransactionService.ts`
+   - ✅ Map permission/auth errors to actionable Indonesian messages
+4. ✅ Verify frontend payload guard (`src/store/useCashierStore.ts` and/or `src/screens/CashierDashboard.tsx`)
+   - ✅ Ensure `staffId`, `passcode`, `storeId`, `storeName` always present before submit
+5. ⏳ Run validation checks (typecheck/build for app + functions)
+6. ⏳ Summarize root cause and fix outcome

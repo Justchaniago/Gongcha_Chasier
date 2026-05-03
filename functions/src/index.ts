@@ -7,6 +7,10 @@ import {
   Transaction,
   getFirestore,
 } from "firebase-admin/firestore";
+import {
+  buildLedgerId,
+  createLedgerEntry,
+} from "./services/ledgerService.js";
 
 admin.initializeApp();
 
@@ -81,6 +85,9 @@ interface VoucherRecord {
   code?: string;
   title?: string;
   isUsed?: boolean;
+  rewardId?: string;
+  pointsrequired?: number;
+  pointsRequired?: number;
   [key: string]: unknown;
 }
 
@@ -119,6 +126,8 @@ const getAdminUserRef = (uid: string) => db.collection("admin_users").doc(uid);
 const getUserRef = (uid: string) => db.collection("users").doc(uid);
 const getTransactionRef = (transactionId: string) =>
   db.collection("transactions").doc(transactionId);
+const getRewardRef = (rewardId: string) =>
+  db.collection("rewards_catalog").doc(rewardId);
 
 const authorizeCashierWrite = async (
   authUid: string,
@@ -159,34 +168,64 @@ const authorizeCashierWrite = async (
     const cashiers = adminData.cashiers as CashierProfile[];
     const cashierStaffId = normalizeString(requestedCashierStaffId);
     const cashierPasscode = normalizeString(requestedCashierPasscode);
-    if (!cashierStaffId || !cashierPasscode) {
+
+    // Preferred path: strict cashier credential verification when provided.
+    if (cashierStaffId || cashierPasscode) {
+      if (!cashierStaffId || !cashierPasscode) {
+        throw new HttpsError(
+          "permission-denied",
+          "Cashier staffId and passcode must both be provided."
+        );
+      }
+
+      const cashier = cashiers.find(
+        (c) => normalizeString(c.staffId) === cashierStaffId
+      );
+      if (!cashier) {
+        throw new HttpsError(
+          "permission-denied",
+          "Cashier profile not found for provided staffId."
+        );
+      }
+
+      if (normalizeString(cashier.passcode) !== cashierPasscode) {
+        throw new HttpsError(
+          "permission-denied",
+          "Invalid cashier passcode for provided staffId."
+        );
+      }
+
+      const cashierRole =
+        typeof cashier.role === "string" ? cashier.role.toUpperCase() : "STAFF";
+      if (!["STAFF", "MANAGER", "ADMIN"].includes(cashierRole)) {
+        throw new HttpsError(
+          "permission-denied",
+          "Cashier role is not allowed."
+        );
+      }
+
+      return {
+        staffId: cashierStaffId,
+        cashierName: normalizeString(cashier.name) || "Cashier",
+        role: cashierRole,
+        assignedStoreId,
+      };
+    }
+
+    // Safe fallback for recovery: allow legacy admin/staff role path only when
+    // cashier credentials are absent, while still respecting store ownership.
+    if (!CASHIER_WRITE_ROLES.includes(normalizedAdminRole)) {
       throw new HttpsError(
         "permission-denied",
-        "Cashier staffId and passcode are required."
+        "Cashier credentials are missing and current role is " +
+          "not allowed for fallback."
       );
     }
 
-    const cashier = cashiers.find(
-      (c) => normalizeString(c.staffId) === cashierStaffId
-    );
-    if (!cashier) {
-      throw new HttpsError("permission-denied", "Cashier profile not found.");
-    }
-
-    if (normalizeString(cashier.passcode) !== cashierPasscode) {
-      throw new HttpsError("permission-denied", "Invalid cashier passcode.");
-    }
-
-    const cashierRole =
-      typeof cashier.role === "string" ? cashier.role.toUpperCase() : "STAFF";
-    if (!["STAFF", "MANAGER", "ADMIN"].includes(cashierRole)) {
-      throw new HttpsError("permission-denied", "Cashier role is not allowed.");
-    }
-
     return {
-      staffId: cashierStaffId,
-      cashierName: normalizeString(cashier.name) || "Cashier",
-      role: cashierRole,
+      staffId: authUid,
+      cashierName: normalizeString(adminData.name) || "Staff",
+      role: normalizedAdminRole,
       assignedStoreId,
     };
   }
@@ -362,6 +401,61 @@ const markVoucherAsUsed = (
   return {updated, found, alreadyUsed};
 };
 
+const resolveRedeemPoints = async (
+  transaction: Transaction,
+  voucher?: VoucherRecord
+) => {
+  const voucherPointsRaw =
+    typeof voucher?.pointsrequired === "number" ? voucher.pointsrequired :
+      typeof voucher?.pointsRequired === "number" ? voucher.pointsRequired :
+        NaN;
+  const voucherPoints = Number.isFinite(voucherPointsRaw) ?
+    Math.floor(voucherPointsRaw) :
+    NaN;
+
+  if (Number.isInteger(voucherPoints) && voucherPoints > 0) {
+    return voucherPoints;
+  }
+
+  const rewardId = normalizeString(voucher?.rewardId);
+  if (!rewardId) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Redeem voucher is missing points mapping."
+    );
+  }
+
+  const rewardSnap = await transaction.get(getRewardRef(rewardId));
+  if (!rewardSnap.exists) {
+    throw new HttpsError(
+      "failed-precondition",
+      `Reward document not found for rewardId ${rewardId}.`
+    );
+  }
+
+  const rewardData = rewardSnap.data() as {
+    pointsrequired?: number;
+    pointsRequired?: number;
+  };
+  const rewardPointsRaw =
+    typeof rewardData.pointsrequired === "number" ? rewardData.pointsrequired :
+      typeof rewardData.pointsRequired === "number" ?
+        rewardData.pointsRequired :
+        NaN;
+  const rewardPoints = Number.isFinite(rewardPointsRaw) ?
+    Math.floor(rewardPointsRaw) :
+    NaN;
+
+  if (!Number.isInteger(rewardPoints) || rewardPoints <= 0) {
+    throw new HttpsError(
+      "failed-precondition",
+      `Reward ${rewardId} is missing a valid pointsrequired value.`
+    );
+  }
+
+  return rewardPoints;
+};
+
 export const recordCashierEarnTransaction = onCall<
   CashierEarnPayload
 >(
@@ -408,6 +502,9 @@ export const recordCashierEarnTransaction = onCall<
     const transactionRef = getTransactionRef(transactionId);
     const userRef = normalizedUid ? getUserRef(normalizedUid) : null;
     const isEligibleLoyaltyEarn = Boolean(normalizedUid && potentialPoints > 0);
+    const ledgerId = isEligibleLoyaltyEarn && normalizedUid ?
+      buildLedgerId(transactionId, "EARN") :
+      null;
 
     await db.runTransaction(async (transaction) => {
       await ensureTransactionDoesNotExist(transaction, transactionRef);
@@ -446,6 +543,7 @@ export const recordCashierEarnTransaction = onCall<
         status: isEligibleLoyaltyEarn ? "PENDING" : "COMPLETED",
         type: "earn",
         pointsState: isEligibleLoyaltyEarn ? "PENDING" : "NONE",
+        ...(ledgerId ? {ledgerId} : {}),
         createdAt: FieldValue.serverTimestamp(),
       });
 
@@ -454,6 +552,24 @@ export const recordCashierEarnTransaction = onCall<
           pendingPoints: nextPendingPoints,
           updatedAt: FieldValue.serverTimestamp(),
         }, {merge: true});
+      }
+
+      if (ledgerId && normalizedUid) {
+        await createLedgerEntry(transaction, db, {
+          userId: normalizedUid,
+          type: "EARN",
+          points: potentialPoints,
+          direction: "IN",
+          source: "cashier",
+          refId: transactionId,
+          status: "PENDING",
+          metadata: {
+            transactionId,
+            receiptNumber,
+            storeId,
+            storeName,
+          },
+        });
       }
     });
 
@@ -504,6 +620,7 @@ export const recordCashierRedeemTransaction = onCall<
     const transactionId = `REDEEM-${receiptNumber}`;
     const transactionRef = getTransactionRef(transactionId);
     const userRef = getUserRef(userId);
+    const ledgerId = buildLedgerId(transactionId, "REDEEM");
 
     await db.runTransaction(async (transaction) => {
       await ensureTransactionDoesNotExist(transaction, transactionRef);
@@ -559,6 +676,10 @@ export const recordCashierRedeemTransaction = onCall<
         normalizeString(matchedVoucher?.title) ||
         fallbackVoucherTitle ||
         "Voucher";
+      const redeemedPoints = await resolveRedeemPoints(
+        transaction,
+        matchedVoucher
+      );
       const resolvedMemberName =
         normalizeString(userData.name) || memberName || "Pelanggan";
 
@@ -585,9 +706,29 @@ export const recordCashierRedeemTransaction = onCall<
         status: "COMPLETED",
         type: "redeem",
         pointsState: "NONE",
+        ledgerId,
         voucherCode,
         voucherTitle,
         createdAt: FieldValue.serverTimestamp(),
+      });
+
+      await createLedgerEntry(transaction, db, {
+        userId,
+        type: "REDEEM",
+        points: redeemedPoints,
+        direction: "OUT",
+        source: "cashier",
+        refId: transactionId,
+        status: "COMPLETED",
+        metadata: {
+          transactionId,
+          receiptNumber,
+          storeId,
+          storeName,
+          voucherCode,
+          voucherTitle,
+          rewardId: normalizeString(matchedVoucher?.rewardId) || undefined,
+        },
       });
     });
 

@@ -28,6 +28,19 @@ const buildEarnTransactionError = (error: any, receiptNumber: string) => {
   }
 
   if (code === 'permission-denied') {
+    const lowered = rawMessage.toLowerCase();
+
+    if (
+      lowered.includes('cashier profile not found') ||
+      lowered.includes('invalid cashier passcode') ||
+      lowered.includes('cashier staffid and passcode')
+    ) {
+      return {
+        shouldLogAsError: false,
+        message: 'Sesi kasir tidak valid. Pilih kasir yang benar lalu login ulang PIN kasir.',
+      };
+    }
+
     return {
       shouldLogAsError: false,
       message: 'Akun kasir ini belum punya izin untuk mencatat transaksi di store ini.',

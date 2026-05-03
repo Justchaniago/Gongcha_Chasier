@@ -1305,7 +1305,7 @@ export default function CashierDashboard() {
                 <View style={styles.profileHero}>
                    <View style={styles.profileAvatarBox}><Store size={40} color={DESIGN.textPrimary} /></View>
                    <Text style={[styles.locationTitle, { fontSize: storeName.length > 22 ? 18 : 24, maxWidth: width - 80, textAlign: 'center', marginBottom: 8 }]} numberOfLines={1} adjustsFontSizeToFit={true} minimumFontScale={0.7}>{storeName}</Text>
-                   <View style={styles.profileStatusBadge}><View style={styles.statusDot} /><Text style={styles.statusText}>System Connected</Text></View>
+                   <View style={styles.profileStatusBadge}><View style={styles.profileStatusDot} /><Text style={styles.statusText}>System Connected</Text></View>
                 </View>
 
                 <Text style={styles.sectionHeading}>System Actions</Text>
@@ -1338,38 +1338,44 @@ export default function CashierDashboard() {
       <StatusBar barStyle="dark-content" backgroundColor={DESIGN.canvas} />
       
       <SafeAreaView style={styles.safeArea} edges={['top']}>
+        {/* ── REDESIGNED HEADER ─────────────────────────────────── */}
         <View style={styles.header}>
+          {/* Left: Logo + store info */}
           <View style={styles.headerLeft}>
-            <Image source={require('../../assets/images/logo1.webp')} style={styles.headerLogo} resizeMode="contain" />
+            <Image
+              source={require('../../assets/images/logo1.webp')}
+              style={styles.headerLogo}
+              resizeMode="contain"
+            />
             <View style={styles.headerTextContainer}>
-              <Text style={styles.eyebrow}>{getGreeting()}</Text>
-              <Text style={[styles.locationTitle, { fontSize: storeName.length > 22 ? 18 : 22 }]} numberOfLines={1} adjustsFontSizeToFit={true} minimumFontScale={0.7}>
+              <Text style={styles.locationTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72}>
                 {storeName}
               </Text>
-              <Text style={styles.cashierNameText} numberOfLines={1}>
-                {`Cashier: ${activeCashier?.name || '-'}`}
-              </Text>
-              <Text style={styles.cashierNoteText} numberOfLines={1}>
-                PIN-verified cashier handle
-              </Text>
+              <View style={styles.cashierRow}>
+                <View style={styles.cashierDot} />
+                <Text style={styles.cashierNameText} numberOfLines={1}>
+                  {activeCashier?.name || '—'}
+                </Text>
+              </View>
             </View>
           </View>
-          <View style={styles.headerRightRow}>
-            <Animated.View style={[styles.statusPill, { backgroundColor: pillBg }]}>
-              <Animated.Text style={[styles.statusPillText, { opacity: pillTextOpacity }]}>{pillLabel}</Animated.Text>
-            </Animated.View>
+
+          {/* Right: status + lock */}
+          <View style={styles.headerRight}>
+            {/* Compact status indicator */}
+            <Animated.View style={[styles.statusDot, { backgroundColor: pillBg }]} />
+
+            {/* Lock button */}
             <Pressable
               onPress={handleLockNow}
-              style={({ pressed }) => [
-                styles.lockBtn,
-                { opacity: pressed ? 0.85 : 1 },
-              ]}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              style={({ pressed }) => [styles.lockBtn, pressed && styles.lockBtnPressed]}
             >
-              <Lock size={16} color={DESIGN.textPrimary} strokeWidth={3} />
+              <Lock size={15} color={DESIGN.brandRed} strokeWidth={2.5} />
             </Pressable>
           </View>
         </View>
+        {/* ── END HEADER ────────────────────────────────────────── */}
 
         <View style={styles.tabTrackWrapper}>
           <View style={styles.tabTrack}>
@@ -1556,18 +1562,87 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: DESIGN.canvas },
   safeArea: { flex: 1 },
 
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingTop: 16, paddingBottom: 24 },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, paddingRight: 12 },
-  headerLogo: { width: 44, height: 44, marginRight: 12 },
-  headerTextContainer: { flex: 1, justifyContent: 'center' },
-  eyebrow: { fontSize: 13, fontWeight: '700', color: DESIGN.textSecondary, letterSpacing: 0.5, marginBottom: 2, textTransform: 'uppercase' },
-  locationTitle: { fontWeight: '900', color: DESIGN.textPrimary, letterSpacing: -1 },
-  headerRightRow: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 10 },
-  lockBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(211, 35, 42, 0.10)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(211, 35, 42, 0.22)' },
-  statusPill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
-  cashierNameText: { marginTop: 6, fontSize: 13, fontWeight: '900', color: DESIGN.textSecondary },
-  cashierNoteText: { fontSize: 11, fontWeight: '600', color: 'rgba(0,0,0,0.35)', marginTop: 2 },
+  // ── HEADER (redesigned) ───────────────────────────────────────────────────
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 18,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    paddingRight: 12,
+    gap: 12,
+  },
+  headerLogo: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    flexShrink: 0,
+  },
+  headerTextContainer: {
+    flex: 1,
+    gap: 4,
+    justifyContent: 'center',
+  },
+  locationTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: DESIGN.textPrimary,
+    letterSpacing: -0.6,
+    lineHeight: 24,
+  },
+  cashierRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  cashierDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: DESIGN.successGreen,
+  },
+  cashierNameText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: DESIGN.textSecondary,
+    letterSpacing: 0.1,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexShrink: 0,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  lockBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: 'rgba(211, 35, 42, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(211, 35, 42, 0.18)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  lockBtnPressed: {
+    backgroundColor: 'rgba(211, 35, 42, 0.16)',
+    transform: [{ scale: 0.94 }],
+  },
+  // ── keep for backward compat (statusPill used elsewhere?) ──
+  statusPill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   statusPillText: { color: '#FFF', fontWeight: 'bold', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5 },
+  eyebrow: { fontSize: 11, fontWeight: '600', color: DESIGN.textSecondary, letterSpacing: 0.5, textTransform: 'uppercase' },
+  cashierNoteText: { fontSize: 11, fontWeight: '500', color: 'rgba(0,0,0,0.30)' },
   
   tabTrackWrapper: { paddingHorizontal: SCREEN_PADDING, marginBottom: 24 },
   tabTrack: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.04)', padding: TAB_TRACK_PADDING, borderRadius: 100, position: 'relative' },
@@ -1636,7 +1711,7 @@ const styles = StyleSheet.create({
   profileStoreName: { fontSize: 24, fontWeight: '900', color: DESIGN.textPrimary, letterSpacing: -0.5 },
   profileStoreLocation: { fontSize: 15, color: DESIGN.textSecondary, marginTop: 4, marginBottom: 16 },
   profileStatusBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(50, 215, 75, 0.1)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100 },
-  statusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: DESIGN.successGreen, marginRight: 6 },
+  profileStatusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: DESIGN.successGreen, marginRight: 6 },
   statusText: { fontSize: 12, fontWeight: '800', color: DESIGN.successGreen, letterSpacing: 0.5 },
   
   profileActionGroup: { backgroundColor: DESIGN.surface, borderRadius: 24, overflow: 'hidden', borderWidth: 1, borderColor: DESIGN.border },
