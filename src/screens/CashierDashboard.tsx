@@ -91,33 +91,19 @@ const SquishyBento = ({ onPress, style, children }: any) => {
 
 // --- 🔥 REDEEM ERROR MODAL ---
 const RedeemErrorModal = ({ visible, message, onClose }: any) => {
-  const [show, setShow] = useState(visible);
-  const anim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (visible) {
-      setShow(true);
-      Animated.spring(anim, { toValue: 1, friction: 7, tension: 80, useNativeDriver: true }).start();
-    } else {
-      Animated.timing(anim, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => setShow(false));
-    }
-  }, [visible]);
-
-  if (!show) return null;
+  if (!visible) return null;
 
   return (
-    <Modal transparent={true} visible={show} animationType="fade" onRequestClose={onClose}>
+    <Modal transparent={true} visible={visible} animationType="fade" onRequestClose={onClose}>
       <View style={{flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)'}}>
-        <Animated.View style={{opacity: anim, transform: [{scale: anim.interpolate({inputRange: [0, 1], outputRange: [0.85, 1]})}]}}>
-          <View style={{width: width - 48, backgroundColor: DESIGN.surface, borderRadius: 20, padding: 32, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 15, elevation: 8}}>
-            <AlertCircle size={60} color={DESIGN.brandRed} strokeWidth={1.5} style={{marginBottom: 16}}/>
-            <Text style={{fontSize: 18, fontWeight: '600', color: DESIGN.textPrimary, marginBottom: 12, textAlign: 'center'}}>Voucher Tidak Bisa Digunakan</Text>
-            <Text style={{fontSize: 15, color: DESIGN.textSecondary, textAlign: 'center', lineHeight: 22, marginBottom: 28}}>{message}</Text>
-            <Pressable onPress={onClose} style={{backgroundColor: DESIGN.brandRed, paddingVertical: 14, paddingHorizontal: 40, borderRadius: 12}}>
-              <Text style={{color: DESIGN.textLight, fontSize: 16, fontWeight: '600'}}>Tutup</Text>
-            </Pressable>
-          </View>
-        </Animated.View>
+        <View style={{width: width - 48, backgroundColor: DESIGN.surface, borderRadius: 20, padding: 32, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 15, elevation: 8}}>
+          <AlertCircle size={60} color={DESIGN.brandRed} strokeWidth={1.5} style={{marginBottom: 16}}/>
+          <Text style={{fontSize: 18, fontWeight: '600', color: DESIGN.textPrimary, marginBottom: 12, textAlign: 'center'}}>Voucher Tidak Bisa Digunakan</Text>
+          <Text style={{fontSize: 15, color: DESIGN.textSecondary, textAlign: 'center', lineHeight: 22, marginBottom: 28}}>{message}</Text>
+          <Pressable onPress={onClose} style={{backgroundColor: DESIGN.brandRed, paddingVertical: 14, paddingHorizontal: 40, borderRadius: 12}}>
+            <Text style={{color: DESIGN.textLight, fontSize: 16, fontWeight: '600'}}>Tutup</Text>
+          </Pressable>
+        </View>
       </View>
     </Modal>
   );

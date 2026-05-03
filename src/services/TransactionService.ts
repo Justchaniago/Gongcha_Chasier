@@ -104,11 +104,6 @@ export const TransactionService = {
       return result.transactionId;
     } catch (error) {
       const handled = buildEarnTransactionError(error, data.receiptNumber.trim());
-      if (handled.shouldLogAsError) {
-        console.error('[TransactionService] Earn transaction failed:', error);
-      } else {
-        console.info('[TransactionService] Earn transaction blocked:', handled.message);
-      }
       throw new Error(handled.message);
     }
   },
@@ -149,11 +144,6 @@ export const TransactionService = {
       return result.transactionId;
     } catch (error) {
       const handled = buildRedeemTransactionError(error, data.voucherCode.trim());
-      if (handled.shouldLogAsError) {
-        console.error('[TransactionService] Redeem transaction failed:', error);
-      } else {
-        console.info('[TransactionService] Redeem transaction blocked:', handled.message);
-      }
       throw new Error(handled.message);
     }
   },

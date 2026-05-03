@@ -289,7 +289,6 @@ export const useCashierStore = create<CashierState>((set, get) => ({
         totalTransactions: state.totalTransactions + 1,
       }));
     } catch (error: any) {
-      console.info("Redeem voucher blocked:", error?.message || error);
       throw error;
     }
   },
