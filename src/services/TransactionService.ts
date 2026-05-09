@@ -8,7 +8,7 @@ import {
 } from 'firebase/firestore';
 import { firestoreDb } from '../config/firebase';
 import { TransactionRecord } from '../types/types';
-import { postTransaction, TransactionRequest } from './backendApi';
+import { postTransaction, postTransactionWithFallback, TransactionRequest } from './backendApi';
 
 const buildEarnTransactionError = (error: any, receiptNumber: string) => {
   const msg = error instanceof Error ? error.message : String(error);
@@ -95,7 +95,12 @@ export const TransactionService = {
         type: 'earn',
       };
 
-      const result = await postTransaction(payload);
+      const result = await postTransactionWithFallback(payload);
+
+      if ('queued' in result) {
+        // Offline — transaction saved locally, will sync when connection returns
+        return undefined;
+      }
 
       if (!result.success) {
         throw new Error(result.error || 'Transaction failed');

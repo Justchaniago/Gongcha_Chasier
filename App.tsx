@@ -1,12 +1,14 @@
 // App.tsx
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Image, StyleSheet, View, ActivityIndicator, Platform, InteractionManager } from 'react-native';
+import { Animated, Easing, Image, StyleSheet, View, ActivityIndicator, Platform, InteractionManager, AppState } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { getAuth } from 'firebase/auth';
 
 // 🔥 IMPORT LAYAR BARU & ZUSTAND
 import { preloadCriticalAssets, warmSecondaryAssets } from './src/utils/preloadAppAssets';
+import { flushQueue } from './src/services/offlineQueue';
+import { postTransaction } from './src/services/backendApi';
 import { useCashierStore } from './src/store/useCashierStore';
 import LoginScreen from './src/screens/LoginScreen';
 import CashierDashboard from './src/screens/CashierDashboard';
@@ -29,6 +31,19 @@ export default function App() {
     // Jalankan listener Firebase saat aplikasi dibuka
     initializeAuth();
   }, [initializeAuth]);
+
+  // Flush offline queue when app comes to foreground
+  useEffect(() => {
+    // Attempt flush on mount
+    flushQueue(postTransaction).catch(() => {});
+
+    const sub = AppState.addEventListener('change', state => {
+      if (state === 'active') {
+        flushQueue(postTransaction).catch(() => {});
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
   // Pre-refresh token every 45 min — prevents auth failure when token expires mid-shift
   useEffect(() => {

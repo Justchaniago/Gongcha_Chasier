@@ -1,4 +1,5 @@
 import { getAuth } from 'firebase/auth';
+import { enqueueTransaction } from './offlineQueue';
 
 const BACKEND_URL =
   process.env.REACT_APP_BACKEND_URL ||
@@ -26,6 +27,10 @@ export interface TransactionResponse {
   error?: string;
   code?: string;
 }
+
+export type TransactionResult =
+  | TransactionResponse
+  | { queued: true; localId: string };
 
 const TIMEOUT_MS = 10_000;
 const MAX_RETRIES = 3;
@@ -73,6 +78,26 @@ async function fetchWithRetry(
 
   // Unreachable — TypeScript guard
   throw new Error('fetchWithRetry: unexpected exit');
+}
+
+const NETWORK_ERROR_RE = /timed out|koneksi internet|terhubung ke server/i;
+
+// Safe wrapper — queues to AsyncStorage on network failure instead of throwing
+export async function postTransactionWithFallback(
+  data: TransactionRequest
+): Promise<TransactionResult> {
+  try {
+    return await postTransaction(data);
+  } catch (err: any) {
+    const msg: string = err?.message ?? '';
+    // Only queue network/timeout failures — 4xx (bad data, auth) should surface immediately
+    if (NETWORK_ERROR_RE.test(msg)) {
+      const localId = await enqueueTransaction(data);
+      console.log(`[backendApi] Network failure — queued as ${localId}`);
+      return { queued: true, localId };
+    }
+    throw err;
+  }
 }
 
 export async function postTransaction(
