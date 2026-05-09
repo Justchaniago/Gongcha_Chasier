@@ -1,11 +1,12 @@
 // @ts-nocheck
 import React, { useState, useRef, useEffect } from 'react';
-import { 
+import {
   View, Text, StyleSheet, Pressable, Platform, StatusBar, ScrollView, Dimensions,
   Image, Animated, Easing, NativeSyntheticEvent, NativeScrollEvent, TouchableWithoutFeedback,
-  Modal, SectionList, ActivityIndicator, TextInput, KeyboardAvoidingView 
+  Modal, SectionList, ActivityIndicator, TextInput, KeyboardAvoidingView, Keyboard, Alert
 } from 'react-native';
 import { QrCode, TrendingUp, Users, Ticket, Crown, X, ChevronRight, Activity, Calendar, Filter, ScanLine, ArrowLeft, Star, ShoppingBag, Banknote, Smartphone, Clock, CheckCircle2, MapPin, Store, RefreshCcw, LogOut, AlertCircle, ChevronLeft, Lock } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { BlurView } from 'expo-blur';
@@ -18,6 +19,10 @@ import { firestoreDb } from '../config/firebase';
 import { TransactionService } from '../services/TransactionService';
 
 const { width, height } = Dimensions.get('window');
+
+const MORPH_CLOSED_W = 176;
+const MORPH_EXPANDED_W = Math.min(width - 40, 360);
+const MORPH_H = 66;
 
 const DESIGN = {
   canvas: '#F2F2F7', surface: '#FFFFFF', surfaceDark: '#1C1C1E', textPrimary: '#000000',
@@ -89,6 +94,88 @@ const SquishyBento = ({ onPress, style, children }: any) => {
   return ( <TouchableWithoutFeedback onPressIn={handlePressIn} onPressOut={handlePressOut} onPress={onPress}><Animated.View style={[style, { transform: [{ scale }] }]}>{children}</Animated.View></TouchableWithoutFeedback> );
 };
 
+// --- 🔥 MORPH FAB ---
+function MorphFAB({ isOpen, onToggle, onScanPress, onInputPress }: any) {
+  const widthAnim = useRef(new Animated.Value(MORPH_CLOSED_W)).current;
+  const singleAlpha = useRef(new Animated.Value(1)).current;
+  const splitAlpha = useRef(new Animated.Value(0)).current;
+  const divAlpha = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (isOpen) {
+      // Single smooth expand — no pre-squeeze direction reversal
+      Animated.timing(widthAnim, {
+        toValue: MORPH_EXPANDED_W,
+        duration: 320,
+        easing: Easing.out(Easing.exp),
+        useNativeDriver: false,
+      }).start();
+      // Quick press feel → ease-out back (no spring bounce)
+      Animated.sequence([
+        Animated.timing(scaleAnim, { toValue: 0.95, duration: 70, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+        Animated.timing(scaleAnim, { toValue: 1.0, duration: 210, easing: Easing.out(Easing.exp), useNativeDriver: true }),
+      ]).start();
+      // Content crossfade — old out fast, new in after shape is mostly settled
+      Animated.timing(singleAlpha, { toValue: 0, duration: 90, useNativeDriver: true }).start();
+      Animated.sequence([Animated.delay(120), Animated.timing(splitAlpha, { toValue: 1, duration: 160, easing: Easing.out(Easing.quad), useNativeDriver: true })]).start();
+      Animated.sequence([Animated.delay(150), Animated.timing(divAlpha, { toValue: 1, duration: 120, easing: Easing.out(Easing.quad), useNativeDriver: true })]).start();
+    } else {
+      Animated.timing(widthAnim, {
+        toValue: MORPH_CLOSED_W,
+        duration: 240,
+        easing: Easing.out(Easing.exp),
+        useNativeDriver: false,
+      }).start();
+      Animated.timing(splitAlpha, { toValue: 0, duration: 80, useNativeDriver: true }).start();
+      Animated.timing(divAlpha, { toValue: 0, duration: 60, useNativeDriver: true }).start();
+      Animated.sequence([Animated.delay(60), Animated.timing(singleAlpha, { toValue: 1, duration: 120, easing: Easing.out(Easing.quad), useNativeDriver: true })]).start();
+    }
+  }, [isOpen]);
+
+  return (
+    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+      <Animated.View style={[styles.morphShadow, { width: widthAnim }]}>
+      <Animated.View style={[styles.morphPill, { width: widthAnim }]}>
+        {/* Closed: single pill content */}
+        <Animated.View style={[StyleSheet.absoluteFillObject, styles.morphSingleWrap, { opacity: singleAlpha }]} pointerEvents={isOpen ? 'none' : 'auto'}>
+          <Pressable style={styles.morphSingleBtn} onPress={() => onToggle(true)}>
+            <View style={styles.morphIconCircle}>
+              <QrCode size={18} color={DESIGN.brandRed} strokeWidth={2.5} />
+            </View>
+            <Text style={styles.morphSingleLabel}>ACTIONS</Text>
+            <ChevronRight size={14} color="rgba(255,255,255,0.65)" strokeWidth={2.5} />
+          </Pressable>
+        </Animated.View>
+
+        {/* Expanded: two action buttons */}
+        <Animated.View style={[StyleSheet.absoluteFillObject, styles.morphSplitWrap, { opacity: splitAlpha }]} pointerEvents={isOpen ? 'auto' : 'none'}>
+          <Pressable style={styles.morphSplitBtn} onPress={() => { onToggle(false); onScanPress(); }}>
+            <View style={styles.morphIconCircle}>
+              <QrCode size={18} color={DESIGN.brandRed} strokeWidth={2.5} />
+            </View>
+            <View>
+              <Text style={styles.morphSplitTitle}>Scan QR</Text>
+              <Text style={styles.morphSplitSub}>Member Card</Text>
+            </View>
+          </Pressable>
+          <Animated.View style={[styles.morphDivider, { opacity: divAlpha }]} />
+          <Pressable style={styles.morphSplitBtn} onPress={() => { onToggle(false); onInputPress(); }}>
+            <View style={styles.morphIconCircle}>
+              <Banknote size={18} color={DESIGN.brandRed} strokeWidth={2} />
+            </View>
+            <View>
+              <Text style={styles.morphSplitTitle}>Input TRX</Text>
+              <Text style={styles.morphSplitSub}>New Transaction</Text>
+            </View>
+          </Pressable>
+        </Animated.View>
+      </Animated.View>
+      </Animated.View>
+    </Animated.View>
+  );
+}
+
 // --- 🔥 REDEEM ERROR MODAL ---
 const RedeemErrorModal = ({ visible, message, onClose }: any) => {
   if (!visible) return null;
@@ -113,6 +200,7 @@ const RedeemErrorModal = ({ visible, message, onClose }: any) => {
 const PopModal = ({ visible, onClose, children, keyboardPadding = false }: any) => {
   const [show, setShow] = useState(visible);
   const anim = useRef(new Animated.Value(0)).current;
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     if (visible) {
@@ -125,61 +213,153 @@ const PopModal = ({ visible, onClose, children, keyboardPadding = false }: any) 
 
   if (!show) return null;
 
-  const content = (
-    <View style={styles.voucherModalOverlay}>
-      <TouchableWithoutFeedback onPress={onClose}>
-        <Animated.View style={[StyleSheet.absoluteFill, { opacity: anim }]}>
-           <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
-        </Animated.View>
-      </TouchableWithoutFeedback>
-      
-      <Animated.View pointerEvents="box-none" style={[styles.voucherModalContainer, { opacity: anim, transform: [ { scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1] }) }, { translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) } ] }]}>
-        {children}
-      </Animated.View>
-    </View>
-  );
+  // Bottom-sheet variant — keyboard-aware
+  // Backdrop lives at Modal root so KAV shrinking never exposes background.
+  // KAV only wraps the card, anchored to bottom via justifyContent:'flex-end'.
+  if (keyboardPadding) {
+    return (
+      <Modal transparent visible={show} animationType="none" onRequestClose={onClose}>
+        {/* Backdrop: always full-screen, outside KAV */}
+        <TouchableWithoutFeedback onPress={onClose}>
+          <Animated.View style={[StyleSheet.absoluteFill, { opacity: anim }]}>
+            <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
+          </Animated.View>
+        </TouchableWithoutFeedback>
 
-  return <Modal transparent visible={show} animationType="none" onRequestClose={onClose}>{keyboardPadding ? (<KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{flex: 1}}>{content}</KeyboardAvoidingView>) : content}</Modal>;
+        {/* KAV wraps only the sheet card */}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.kbSheetWrapper}
+          pointerEvents="box-none"
+        >
+          <Animated.View
+            pointerEvents="auto"
+            style={[
+              styles.kbSheetCard,
+              { paddingBottom: Math.max(insets.bottom, 16) },
+              {
+                opacity: anim,
+                transform: [
+                  { translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [80, 0] }) },
+                ],
+              },
+            ]}
+          >
+            {children}
+          </Animated.View>
+        </KeyboardAvoidingView>
+      </Modal>
+    );
+  }
+
+  // Default: centered card modal — unchanged behavior
+  return (
+    <Modal transparent visible={show} animationType="none" onRequestClose={onClose}>
+      <View style={styles.voucherModalOverlay}>
+        <TouchableWithoutFeedback onPress={onClose}>
+          <Animated.View style={[StyleSheet.absoluteFill, { opacity: anim }]}>
+            <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
+          </Animated.View>
+        </TouchableWithoutFeedback>
+        <Animated.View pointerEvents="box-none" style={[styles.voucherModalContainer, { opacity: anim, transform: [ { scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1] }) }, { translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) } ] }]}>
+          {children}
+        </Animated.View>
+      </View>
+    </Modal>
+  );
 };
 
 // --- SCANNER OVERLAY ---
+// Responsive scan frame size — width-relative, no hardcoded screen coords
+const SCAN_SIZE = Math.min(width * 0.68, 280);
+const SCAN_DIM = 'rgba(0,0,0,0.78)';
+const CORNER_SIZE = 26;
+const CORNER_W = 3;
+
 const ScannerOverlay = ({ visible, onClose, onSuccessScan }: { visible: boolean, onClose: () => void, onSuccessScan: (data: string) => void }) => {
   const insets = useSafeAreaInsets();
-  const opacityAnim = useRef(new Animated.Value(0)).current;
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (visible) { setScanned(false); Animated.timing(opacityAnim, { toValue: 1, duration: 250, useNativeDriver: true }).start(); } 
-    else { Animated.timing(opacityAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start(); }
+    if (visible) {
+      setScanned(false);
+      fadeAnim.setValue(0);
+      Animated.timing(fadeAnim, { toValue: 1, duration: 260, useNativeDriver: true }).start();
+    }
   }, [visible]);
 
-  const handleBarcodeScanned = ({ type, data }: { type: string, data: string }) => { if (scanned) return; setScanned(true); onSuccessScan(data); };
-  if (!visible) return null;
+  const handleBarcodeScanned = ({ data }: { type: string, data: string }) => {
+    if (scanned) return;
+    setScanned(true);
+    onSuccessScan(data);
+  };
 
+  // Use visible directly — no mounted state, no extra render cycle.
+  // Modal presents immediately when visible=true, critical for iOS Modal stacking.
   return (
-    <Animated.View style={[styles.scannerContainer, { opacity: opacityAnim }]}> 
-      <View style={styles.cameraLayer}>
-         {(!permission || !permission.granted) ? (
-            <View style={styles.noCameraBox}>
-              <Text style={{color: 'white', marginBottom: 20}}>Akses Kamera Diperlukan</Text>
-              <Pressable style={styles.permissionBtn} onPress={requestPermission}><Text style={styles.permissionBtnText}>Izinkan Akses</Text></Pressable>
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
+      <Animated.View style={[styles.scannerRoot, { opacity: fadeAnim }]}>
+
+        {/* Camera layer — fills entire screen */}
+        {permission?.granted ? (
+          <CameraView
+            style={StyleSheet.absoluteFillObject}
+            facing="back"
+            barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+            onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
+          />
+        ) : (
+          <View style={styles.scannerNoCam}>
+            <Text style={styles.scannerNoCamText}>Akses kamera diperlukan</Text>
+            <Pressable style={styles.scannerPermBtn} onPress={requestPermission}>
+              <Text style={styles.scannerPermBtnText}>Izinkan Akses</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {/* 4-rect overlay — no absolute coords, pure flex */}
+        <View style={styles.scannerOverlay} pointerEvents="none">
+          <View style={[styles.scannerDim, { flex: 1 }]} />
+          <View style={{ flexDirection: 'row', height: SCAN_SIZE }}>
+            <View style={styles.scannerDim} />
+            {/* Transparent center — camera shows through */}
+            <View style={{ width: SCAN_SIZE, height: SCAN_SIZE }}>
+              {/* Corner brackets */}
+              <View style={[styles.scanCorner, { top: 0, left: 0, borderTopWidth: CORNER_W, borderLeftWidth: CORNER_W, borderTopLeftRadius: 8 }]} />
+              <View style={[styles.scanCorner, { top: 0, right: 0, borderTopWidth: CORNER_W, borderRightWidth: CORNER_W, borderTopRightRadius: 8 }]} />
+              <View style={[styles.scanCorner, { bottom: 0, left: 0, borderBottomWidth: CORNER_W, borderLeftWidth: CORNER_W, borderBottomLeftRadius: 8 }]} />
+              <View style={[styles.scanCorner, { bottom: 0, right: 0, borderBottomWidth: CORNER_W, borderRightWidth: CORNER_W, borderBottomRightRadius: 8 }]} />
             </View>
-         ) : ( <CameraView style={StyleSheet.absoluteFillObject} facing="back" barcodeScannerSettings={{ barcodeTypes: ["qr"] }} onBarcodeScanned={scanned ? undefined : handleBarcodeScanned} /> )}
-      </View>
-      <View style={styles.darkHoleOverlay} pointerEvents="none" />
-      <View style={styles.viewfinderCenterFrame} pointerEvents="none"><View style={styles.viewfinderHole} /></View>
-      <View style={styles.scannerUIContainer} pointerEvents="box-none">
-        <View style={[styles.scannerHeaderGrid, { marginTop: Platform.OS === 'android' ? insets.top + 20 : insets.top || 20 }]}> 
-          <View style={styles.scannerHeaderLeft}><Pressable style={styles.scannerCloseBtn} onPress={onClose}><X size={22} color={DESIGN.surface} /></Pressable></View>
-          <View style={styles.scannerHeaderCenter}><View style={styles.scannerBadgePill}><ScanLine size={14} color={DESIGN.surface} style={{marginRight: 6}} /><Text style={styles.scannerBadgeText}>Scanner</Text></View></View>
-          <View style={styles.scannerHeaderRight} />
+            <View style={styles.scannerDim} />
+          </View>
+          {/* More space below frame — instruction lives here */}
+          <View style={[styles.scannerDim, { flex: 1.6 }]} />
         </View>
-        <View style={[styles.scannerFooter, { marginBottom: insets.bottom + 40 }]}> 
-          <Text style={styles.scannerInstruction}>Arahkan kamera ke QR Profil atau Voucher Pelanggan</Text>
+
+        {/* UI layer — header + footer, always safe-area aware */}
+        <View style={[styles.scannerUI, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 32 }]} pointerEvents="box-none">
+          <View style={styles.scannerHeader}>
+            <Pressable style={styles.scannerCloseBtn} onPress={onClose} pointerEvents="auto">
+              <X size={20} color={DESIGN.surface} />
+            </Pressable>
+            <View style={styles.scannerBadgePill}>
+              <ScanLine size={13} color={DESIGN.surface} style={{ marginRight: 6 }} />
+              <Text style={styles.scannerBadgeText}>Scanner</Text>
+            </View>
+            <View style={{ width: 44 }} />
+          </View>
+
+          <View style={{ flex: 1 }} />
+
+          <Text style={styles.scannerInstruction}>
+            Arahkan kamera ke QR Profil atau Voucher Pelanggan
+          </Text>
         </View>
-      </View>
-    </Animated.View>
+
+      </Animated.View>
+    </Modal>
   );
 };
 
@@ -204,6 +384,7 @@ const MemberDetailPage = ({ visible, onClose, onShowAlert }: { visible: boolean,
   const [isCheckingDuplicateReceipt, setIsCheckingDuplicateReceipt] = useState(false);
   const [memberHistory, setMemberHistory] = useState<any[]>([]);
   const [selectedHistoryItem, setSelectedHistoryItem] = useState<any>(null);
+  const [activeContentTab, setActiveContentTab] = useState<'vouchers' | 'history'>('vouchers');
 
   const potentialPoints = amountStr ? Math.floor(parseInt(amountStr.replace(/\D/g, ''), 10) / 1000) : 0;
 
@@ -213,7 +394,7 @@ const MemberDetailPage = ({ visible, onClose, onShowAlert }: { visible: boolean,
       fetchMemberHistory();
     } else {
       Animated.parallel([ Animated.spring(slideAnim, { toValue: width, friction: 10, tension: 65, useNativeDriver: true }), Animated.timing(bgOpacity, { toValue: 0, duration: 250, useNativeDriver: true }) ]).start();
-      setTrxModalVisible(false); setIsConfirming(false); setPosTrxId(''); setAmountStr(''); setDuplicateReceiptWarning(''); setMemberHistory([]); setSelectedHistoryItem(null);
+      setTrxModalVisible(false); setIsConfirming(false); setPosTrxId(''); setAmountStr(''); setDuplicateReceiptWarning(''); setMemberHistory([]); setSelectedHistoryItem(null); setActiveContentTab('vouchers');
     }
   }, [visible, activeMember?.uid]);
 
@@ -305,89 +486,136 @@ const MemberDetailPage = ({ visible, onClose, onShowAlert }: { visible: boolean,
 
   if (!activeMember) return null;
 
+  const tier = activeMember.tier || 'Silver';
+  const tierGradient: [string, string] =
+    tier === 'Platinum' ? ['#3A3A4A', '#1C1C2E'] :
+    tier === 'Gold'     ? ['#C9A227', '#8B6914'] :
+                          ['#8E9EA8', '#5A6B75'];
+  const tierAccent = tier === 'Platinum' ? '#A0A0C0' : tier === 'Gold' ? DESIGN.gold : '#BCC6CC';
+  const initials = (activeMember.name || 'M').split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase();
+  const activeVouchers = activeMember.vouchers?.filter((v: any) => !v.isUsed) ?? [];
+
   return (
-    <Animated.View style={[styles.pageContainer, { transform: [{ translateX: slideAnim }] }, !visible ? { pointerEvents: 'none' } : {} ]}>
-      <Animated.View style={[styles.pageBackground, { opacity: bgOpacity }]} />
+    <Animated.View style={[styles.pageContainer, { transform: [{ translateX: slideAnim }] }, !visible ? { pointerEvents: 'none' } : {}]}>
+
+      {/* ── HERO SECTION ── */}
+      <LinearGradient colors={tierGradient} style={[styles.memberHero, { paddingTop: insets.top + 56 }]}>
+        <View style={[styles.memberAvatarRing, { borderColor: tierAccent + '55' }]}>
+          {activeMember.photoURL ? (
+            <Image source={{ uri: activeMember.photoURL }} style={styles.memberAvatarImg} />
+          ) : (
+            <View style={[styles.memberAvatarInner, { backgroundColor: tierAccent + '33' }]}>
+              <Text style={[styles.memberAvatarText, { color: tierAccent }]}>{initials}</Text>
+            </View>
+          )}
+        </View>
+        <Text style={styles.memberHeroName}>{activeMember.name || 'Pelanggan'}</Text>
+        <Text style={styles.memberHeroUid}>UID · ···{activeMember.uid.slice(-6)}</Text>
+        <View style={styles.memberHeroStats}>
+          <View style={styles.memberHeroPtsBlock}>
+            <Text style={[styles.memberHeroPtsLabel, { color: tierAccent + 'CC' }]}>POIN TERSEDIA</Text>
+            <Text style={styles.memberHeroPtsValue}>{formatRupiah(activeMember.points || 0)}</Text>
+          </View>
+          <View style={[styles.memberTierChip, { borderColor: tierAccent + '55', backgroundColor: tierAccent + '22' }]}>
+            <Crown size={11} color={tierAccent} strokeWidth={2.5} style={{ marginRight: 5 }} />
+            <Text style={[styles.memberTierChipText, { color: tierAccent }]}>{tier.toUpperCase()}</Text>
+          </View>
+        </View>
+      </LinearGradient>
+
+      {/* ── FLOATING BACK ── */}
       <View style={[styles.floatingHeader, { top: insets.top + 10 }]}>
-        <Pressable style={styles.floatingBackPill} onPress={onClose}>
-          <ArrowLeft size={20} color={DESIGN.textPrimary} strokeWidth={2.5} />
+        <Pressable style={styles.floatingBackPillLight} onPress={onClose}>
+          <ArrowLeft size={20} color="#FFF" strokeWidth={2.5} />
         </Pressable>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.pageScroll, { paddingTop: insets.top + 80, paddingBottom: insets.bottom + 140 }]} keyboardShouldPersistTaps="handled">
-        <View style={styles.digitalCard}>
-          <View style={styles.digitalCardHeader}>
-            <View><Text style={styles.cardBrandText}>GONG CHA</Text><Text style={styles.cardSubText}>MEMBER</Text></View>
-            <View style={styles.cardTierBadge}><Crown size={12} color={DESIGN.surfaceDark} strokeWidth={3} style={{marginRight: 4}} /><Text style={styles.cardTierText}>{activeMember.tier || 'Silver'}</Text></View>
-          </View>
-          <View style={styles.digitalCardBody}>
-            <Text style={styles.cardMemberName}>{activeMember.name || 'Pelanggan'}</Text><Text style={styles.cardMemberID}>UID: {activeMember.uid}</Text>
-          </View>
+      {/* ── CONTENT PANEL ── */}
+      <View style={styles.memberContentPanel}>
+        {/* Tabs */}
+        <View style={styles.memberTabRow}>
+          <Pressable style={[styles.memberTab, activeContentTab === 'vouchers' && styles.memberTabActive]} onPress={() => setActiveContentTab('vouchers')}>
+            <Ticket size={14} color={activeContentTab === 'vouchers' ? DESIGN.brandRed : DESIGN.textSecondary} strokeWidth={2.5} style={{ marginRight: 6 }} />
+            <Text style={[styles.memberTabText, activeContentTab === 'vouchers' && styles.memberTabTextActive]}>
+              Vouchers{activeVouchers.length > 0 ? ` (${activeVouchers.length})` : ''}
+            </Text>
+          </Pressable>
+          <Pressable style={[styles.memberTab, activeContentTab === 'history' && styles.memberTabActive]} onPress={() => setActiveContentTab('history')}>
+            <Activity size={14} color={activeContentTab === 'history' ? DESIGN.brandRed : DESIGN.textSecondary} strokeWidth={2.5} style={{ marginRight: 6 }} />
+            <Text style={[styles.memberTabText, activeContentTab === 'history' && styles.memberTabTextActive]}>Riwayat</Text>
+          </Pressable>
         </View>
 
-        <View style={styles.statsRow}>
-           <View style={[styles.statBox, {width: '100%'}]}>
-              <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
-                 <View><View style={styles.statIconGold}><Star size={20} color={DESIGN.gold} /></View><Text style={styles.statLabel}>Total Poin Tersedia</Text></View>
-                 <Text style={[styles.statValue, {fontSize: 32}]}>{formatRupiah(activeMember.points || 0)}</Text>
-              </View>
-              <Text style={{color: DESIGN.textSecondary, fontSize: 13, marginTop: 12, lineHeight: 18}}>Setiap kelipatan Rp 1.000 otomatis dikonversi menjadi 1 Poin. Poin dapat ditukar dengan voucher katalog.</Text>
-           </View>
-        </View>
-
-        <Text style={styles.sectionHeading}>Voucher Pelanggan</Text>
-        <View style={styles.rewardContainer}>
-           {activeMember.vouchers?.filter((v: any) => !v.isUsed).length > 0 ? (
-             activeMember.vouchers.filter((v: any) => !v.isUsed).map((v: any) => (
-                <View key={v.id} style={styles.ticketCard}>
-                   <View style={styles.ticketLeft}><Text style={styles.ticketTitle}>{v.title}</Text><Text style={styles.ticketSub}>Exp: {v.expiresAt ? new Date(v.expiresAt).toLocaleDateString('id-ID', {day:'numeric', month:'short', year:'numeric'}) : '-'}</Text></View>
-                   <View style={styles.ticketDivider} />
-                   <Pressable style={styles.ticketRight} onPress={() => setScannedVoucher(v)}><Text style={styles.ticketActionText}>Redeem</Text></Pressable>
+        {/* Scrollable content */}
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.memberPanelScroll, { paddingBottom: (insets.bottom || 24) + 100 }]} keyboardShouldPersistTaps="handled">
+          {activeContentTab === 'vouchers' ? (
+            activeVouchers.length > 0 ? activeVouchers.map((v: any) => (
+              <View key={v.id ?? v.code} style={styles.memberVoucherCard}>
+                <View style={styles.memberVoucherLeft}>
+                  <View style={styles.memberVoucherIconWrap}>
+                    <Ticket size={18} color={DESIGN.brandRed} strokeWidth={2} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.memberVoucherTitle} numberOfLines={1}>{v.title}</Text>
+                    <Text style={styles.memberVoucherExp}>
+                      Berlaku hingga {v.expiresAt ? new Date(v.expiresAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
+                    </Text>
+                  </View>
                 </View>
-             ))
-           ) : ( <Text style={{color: DESIGN.textSecondary, fontStyle: 'italic', marginBottom: 16}}>Belum ada voucher aktif yang dimiliki.</Text> )}
-        </View>
-
-        <Text style={[styles.sectionHeading, {marginTop: 16}]}>Riwayat Aktivitas</Text>
-        {memberHistory.length > 0 ? memberHistory.map((item: any) => (
-            <Pressable key={item.id} style={({pressed}) => [styles.historyRow, pressed && {transform: [{scale: 0.98}], backgroundColor: 'rgba(0,0,0,0.02)'}]} onPress={() => setSelectedHistoryItem(item)}>
-               <View style={[styles.historyIconBox, item.type === 'REDEEM' && {backgroundColor: 'rgba(211, 35, 42, 0.05)'}]}>
-                  {item.type === 'REDEEM' ? <Ticket size={20} color={DESIGN.brandRed}/> : <ShoppingBag size={20} color={DESIGN.textPrimary}/>}
-               </View>
-               <View style={styles.historyInfo}>
-                  <Text style={styles.historyTrxId}>{item.type === 'REDEEM' ? (item.voucherTitle || 'Voucher') : (item.posTransactionId || item.id)}</Text>
-                  <Text style={styles.historyDetails}>
-                    {item.createdAt?.toDate
-                      ? new Date(item.createdAt.toDate()).toLocaleDateString('id-ID', {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'})
-                      : '-'} • {item.type} • {item.cashierName || '-'}
+                <Pressable style={({ pressed }) => [styles.memberRedeemBtn, pressed && { transform: [{ scale: 0.95 }] }]} onPress={() => setScannedVoucher(v)}>
+                  <Text style={styles.memberRedeemBtnText}>Redeem</Text>
+                </Pressable>
+              </View>
+            )) : (
+              <View style={styles.memberEmptyState}>
+                <Ticket size={32} color={DESIGN.textSecondary} strokeWidth={1.5} />
+                <Text style={styles.memberEmptyText}>Belum ada voucher aktif</Text>
+              </View>
+            )
+          ) : (
+            memberHistory.length > 0 ? memberHistory.map((item: any) => (
+              <Pressable key={item.id} style={({ pressed }) => [styles.memberHistoryRow, pressed && { opacity: 0.75 }]} onPress={() => setSelectedHistoryItem(item)}>
+                <View style={[styles.memberHistoryIcon, item.type === 'REDEEM' && { backgroundColor: 'rgba(211,35,42,0.08)' }]}>
+                  {item.type === 'REDEEM' ? <Ticket size={16} color={DESIGN.brandRed} /> : <ShoppingBag size={16} color={DESIGN.textPrimary} />}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.memberHistoryTitle} numberOfLines={1}>
+                    {item.type === 'REDEEM' ? (item.voucherTitle || 'Voucher') : (item.posTransactionId || item.id)}
                   </Text>
-               </View>
-               <View style={styles.historyTotalBox}>
+                  <Text style={styles.memberHistoryMeta}>
+                    {item.createdAt?.toDate ? new Date(item.createdAt.toDate()).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '-'}
+                    {item.cashierName ? ` · ${item.cashierName}` : ''}
+                  </Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
                   {item.type === 'EARN' ? (
                     <>
-                      <Text style={styles.historyTotalText}>Rp {formatRupiah(item.totalAmount || 0)}</Text>
-                      <Text style={[
-                        styles.historyPointText,
-                        {
-                          marginTop: 4,
-                          color: item.pointsState === 'PENDING' ? DESIGN.outstandingOrange : DESIGN.successGreen,
-                          fontSize: 12,
-                        },
-                      ]}>
-                        +{item.pointsEarned || 0} Pts{item.pointsState === 'PENDING' ? ' (Pending)' : ''}
+                      <Text style={styles.memberHistoryAmount}>Rp {formatRupiah(item.totalAmount || 0)}</Text>
+                      <Text style={[styles.memberHistoryPts, { color: item.pointsState === 'PENDING' ? DESIGN.outstandingOrange : DESIGN.successGreen }]}>
+                        +{item.pointsEarned || 0} pts{item.pointsState === 'PENDING' ? ' ⏳' : ''}
                       </Text>
                     </>
-                  ) : ( <Text style={[styles.historyTotalText, {color: DESIGN.brandRed, fontSize: 13}]}>REDEEMED</Text> )}
+                  ) : (
+                    <Text style={[styles.memberHistoryAmount, { color: DESIGN.brandRed, fontSize: 12 }]}>REDEEMED</Text>
+                  )}
                 </View>
-            </Pressable>
-        )) : ( <Text style={{color: DESIGN.textSecondary, fontStyle: 'italic', marginBottom: 24}}>Belum ada riwayat transaksi.</Text> )}
-      </ScrollView>
+              </Pressable>
+            )) : (
+              <View style={styles.memberEmptyState}>
+                <Activity size={32} color={DESIGN.textSecondary} strokeWidth={1.5} />
+                <Text style={styles.memberEmptyText}>Belum ada riwayat transaksi</Text>
+              </View>
+            )
+          )}
+        </ScrollView>
+      </View>
 
-      <View style={[styles.stickyBottomBar, { paddingBottom: insets.bottom || 24 }]}> 
-         <Pressable style={({ pressed }) => [ styles.primaryActionBtn, pressed && { transform: [{ scale: 0.96 }] } ]} onPress={() => {setTrxModalVisible(true); setIsConfirming(false);}}>
-            <ShoppingBag size={20} color={DESIGN.surface} style={{marginRight: 8}} />
-            <Text style={styles.primaryActionText}>Record Transaction</Text>
-         </Pressable>
+      {/* ── STICKY CTA ── */}
+      <View style={[styles.stickyBottomBar, { paddingBottom: insets.bottom || 24 }]}>
+        <Pressable style={({ pressed }) => [styles.primaryActionBtn, pressed && { transform: [{ scale: 0.96 }] }]} onPress={() => { setTrxModalVisible(true); setIsConfirming(false); }}>
+          <ShoppingBag size={20} color={DESIGN.surface} style={{ marginRight: 8 }} />
+          <Text style={styles.primaryActionText}>Record Transaction</Text>
+        </Pressable>
       </View>
 
       <PopModal visible={selectedHistoryItem !== null} onClose={() => setSelectedHistoryItem(null)}>
@@ -503,6 +731,17 @@ export default function CashierDashboard() {
   const [isMemberPageVisible, setIsMemberPageVisible] = useState(false);
   const [selectedHistoryItem, setSelectedHistoryItem] = useState<any>(null);
 
+  const [fabOpen, setFabOpen] = useState(false);
+
+  // --- New transaction (reverse) flow ---
+  const scanModeRef = useRef<'member' | 'transaction'>('member');
+  const [showNewTrxInput, setShowNewTrxInput] = useState(false);
+  const [newTrxAmount, setNewTrxAmount] = useState('');
+  const [newTrxReceiptId, setNewTrxReceiptId] = useState('');
+  const [newTrxPendingMember, setNewTrxPendingMember] = useState<any>(null);
+  const [showNewTrxConfirm, setShowNewTrxConfirm] = useState(false);
+  const [isProcessingTrx, setIsProcessingTrx] = useState(false);
+
   const storeState: any = useCashierStore();
   const { staff, activeCashier, isLocked, syncData, logout, scannedVoucher, setScannedVoucher, redeemVoucher, setActiveCashier } = storeState;
   
@@ -570,7 +809,7 @@ export default function CashierDashboard() {
   // 1. FETCH MURNI DARI FIREBASE 
   useEffect(() => {
     if (!staff) return;
-    setStoreName(staff.name || 'Unknown Store');
+    setStoreName(staff.assignedStoreName || staff.name || 'Unknown Store');
 
     const q = query(collection(firestoreDb, 'transactions'), where('storeId', '==', staff.assignedStoreId));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -757,10 +996,10 @@ export default function CashierDashboard() {
   };
 
   const handleSimulateScan = async (data: string) => {
-    setIsScannerVisible(false); 
+    setIsScannerVisible(false);
     try {
       let targetUid = data; let scannedVoucherCode: string | null = null;
-      if (data.startsWith('VOUCHER:')) { const parts = data.split(':'); if (parts.length === 3) { targetUid = parts[1]; scannedVoucherCode = parts[2]; } } 
+      if (data.startsWith('VOUCHER:')) { const parts = data.split(':'); if (parts.length === 3) { targetUid = parts[1]; scannedVoucherCode = parts[2]; } }
       else if (data.startsWith('{')) { try { const parsed = JSON.parse(data); if (parsed.uid) targetUid = parsed.uid; if (parsed.voucherCode) scannedVoucherCode = parsed.voucherCode; } catch(e) {} }
 
       const userDocRef = doc(firestoreDb, 'users', targetUid);
@@ -770,18 +1009,84 @@ export default function CashierDashboard() {
         const userData: any = userDocSnap.data();
         if (isMemberLikeUser(userData)) {
           const memberVouchers = getMemberVouchers(userData);
-          storeState.setActiveMember({ uid: targetUid, name: userData.name || 'Member Tanpa Nama', phone: userData.phoneNumber || '-', points: userData.currentPoints || userData.points || 0, tier: userData.tier || 'Silver', walletBalance: 0, vouchers: memberVouchers });
-          setIsMemberPageVisible(true); 
-          if (scannedVoucherCode) {
-             const foundVoucher = memberVouchers?.find((v: any) => v.code === scannedVoucherCode);
-             if (foundVoucher) {
-                if (foundVoucher.isUsed) { showCustomAlert(`Voucher "${foundVoucher.title}" sudah dipakai!`, "error"); } 
-                else { setTimeout(() => { setScannedVoucher(foundVoucher); }, 400); }
-             } else { showCustomAlert("Voucher tidak valid.", "error"); }
-          } else { showCustomAlert("Profil Pelanggan berhasil dimuat.", "success"); }
+          const memberData = { uid: targetUid, name: userData.name || 'Member Tanpa Nama', phone: userData.phoneNumber || '-', points: userData.currentPoints || userData.points || 0, tier: userData.tier || 'Silver', walletBalance: 0, vouchers: memberVouchers, photoURL: userData.photoURL || userData.photo_url || undefined };
+
+          if (scanModeRef.current === 'transaction') {
+            // Reverse flow: show confirmation before processing
+            setNewTrxPendingMember(memberData);
+            setTimeout(() => setShowNewTrxConfirm(true), 300);
+          } else {
+            // Existing flow: show member profile page
+            storeState.setActiveMember(memberData);
+            setIsMemberPageVisible(true);
+            if (scannedVoucherCode) {
+               const foundVoucher = memberVouchers?.find((v: any) => v.code === scannedVoucherCode);
+               if (foundVoucher) {
+                  if (foundVoucher.isUsed) { showCustomAlert(`Voucher "${foundVoucher.title}" sudah dipakai!`, "error"); }
+                  else { setTimeout(() => { setScannedVoucher(foundVoucher); }, 400); }
+               } else { showCustomAlert("Voucher tidak valid.", "error"); }
+            } // member page visible — no toast needed
+          }
         } else { showCustomAlert("QR Code ini bukan milik Pelanggan.", "error"); }
       } else { showCustomAlert("Pelanggan tidak ditemukan.", "error"); }
     } catch (error) { showCustomAlert("Terjadi kesalahan jaringan.", "error"); }
+  };
+
+  const handleConfirmNewTrx = async () => {
+    if (!newTrxPendingMember) return;
+    setIsProcessingTrx(true);
+    try {
+      const amount = parseInt(newTrxAmount.replace(/[^0-9]/g, ''), 10);
+      storeState.setActiveMember(newTrxPendingMember);
+      await storeState.processTransaction(amount, newTrxReceiptId.trim(), true);
+      setShowNewTrxConfirm(false);
+      setNewTrxAmount('');
+      setNewTrxReceiptId('');
+      setNewTrxPendingMember(null);
+      scanModeRef.current = 'member';
+      showCustomAlert(`Transaksi Rp ${formatRupiah(amount)} berhasil!`, 'success');
+    } catch (e: any) {
+      showCustomAlert(e?.message || 'Transaksi gagal.', 'error');
+    } finally {
+      setIsProcessingTrx(false);
+    }
+  };
+
+  const handleProcessWithoutMember = () => {
+    const amount = parseInt(newTrxAmount.replace(/[^0-9]/g, ''), 10);
+    if (!newTrxAmount || !Number.isFinite(amount) || amount <= 0) {
+      showCustomAlert('Masukkan nominal terlebih dahulu.', 'error');
+      return;
+    }
+    if (!newTrxReceiptId.trim()) {
+      showCustomAlert('Masukkan nomor receipt terlebih dahulu.', 'error');
+      return;
+    }
+    Alert.alert(
+      'Transaksi Tanpa Member',
+      `Lanjutkan transaksi Rp ${formatRupiah(amount)} tanpa scan member?\n\nPoin loyalty TIDAK akan diberikan.`,
+      [
+        { text: 'Batal', style: 'cancel' },
+        {
+          text: 'Lanjut Tanpa Poin',
+          style: 'destructive',
+          onPress: async () => {
+            setShowNewTrxInput(false);
+            setIsProcessingTrx(true);
+            try {
+              await storeState.processTransaction(amount, newTrxReceiptId.trim(), false);
+              setNewTrxAmount('');
+              setNewTrxReceiptId('');
+              showCustomAlert(`Transaksi Rp ${formatRupiah(amount)} terekam tanpa poin.`, 'info');
+            } catch (e: any) {
+              showCustomAlert(e?.message || 'Transaksi gagal.', 'error');
+            } finally {
+              setIsProcessingTrx(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleConfirmRedeem = async () => {
@@ -1425,13 +1730,23 @@ export default function CashierDashboard() {
 
         <Animated.FlatList ref={flatListRef} data={TABS} keyExtractor={(item) => item} renderItem={renderPage} horizontal pagingEnabled showsHorizontalScrollIndicator={false} bounces={false} onMomentumScrollEnd={handleMomentumScrollEnd} onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], { useNativeDriver: true })} scrollEventThrottle={16} />
 
-        <View style={styles.floatingWrapper} pointerEvents="box-none">
-          <Pressable style={({ pressed }) => [styles.scanPill, pressed && { transform: [{ scale: 0.94 }] }]} onPress={() => setIsScannerVisible(true)}>
-            <View style={styles.scanIconBox}><QrCode size={20} color={DESIGN.brandRed} strokeWidth={3} /></View>
-            <Text style={styles.scanText}>SCAN QR</Text>
-          </Pressable>
-        </View>
       </SafeAreaView>
+
+      {/* MorphFAB backdrop — catches outside taps when expanded */}
+      {fabOpen && (
+        <TouchableWithoutFeedback onPress={() => setFabOpen(false)}>
+          <View style={StyleSheet.absoluteFillObject} />
+        </TouchableWithoutFeedback>
+      )}
+      {/* MorphFAB pill — rendered after backdrop so it sits on top */}
+      <View style={styles.floatingWrapper} pointerEvents="box-none">
+        <MorphFAB
+          isOpen={fabOpen}
+          onToggle={setFabOpen}
+          onScanPress={() => { scanModeRef.current = 'member'; setIsScannerVisible(true); }}
+          onInputPress={() => { setNewTrxAmount(''); setNewTrxReceiptId(''); setShowNewTrxInput(true); }}
+        />
+      </View>
 
       <Modal visible={activeModal !== null} transparent={true} animationType="none" onRequestClose={closeModal}>
         <View style={styles.floatingModalWrapper}>
@@ -1466,8 +1781,78 @@ export default function CashierDashboard() {
         </View>
       </Modal>
 
-      <ScannerOverlay visible={isScannerVisible} onClose={() => setIsScannerVisible(false)} onSuccessScan={handleSimulateScan} />
+      <ScannerOverlay visible={isScannerVisible} onClose={() => { setIsScannerVisible(false); scanModeRef.current = 'member'; }} onSuccessScan={handleSimulateScan} />
       <MemberDetailPage visible={isMemberPageVisible} onClose={() => setIsMemberPageVisible(false)} onShowAlert={showCustomAlert} />
+
+      {/* New transaction — input sheet */}
+      <PopModal visible={showNewTrxInput} onClose={() => setShowNewTrxInput(false)} keyboardPadding>
+        <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} bounces={false}>
+          <View style={styles.fabMenuHandle} />
+          <Text style={styles.fabMenuTitle}>Buat Transaksi</Text>
+          <Text style={styles.fabMenuOptionSub}>Input detail transaksi, lalu scan QR member</Text>
+          <View style={styles.newTrxInputGroup}>
+            <Text style={styles.newTrxInputLabel}>NOMINAL (Rp)</Text>
+            <TextInput style={styles.newTrxInput} value={newTrxAmount} onChangeText={(t) => setNewTrxAmount(t.replace(/[^0-9]/g, ''))} placeholder="0" placeholderTextColor={DESIGN.textSecondary} keyboardType="numeric" returnKeyType="next" />
+          </View>
+          <View style={styles.newTrxInputGroup}>
+            <Text style={styles.newTrxInputLabel}>NOMOR TRANSAKSI / RECEIPT</Text>
+            <TextInput style={styles.newTrxInput} value={newTrxReceiptId} onChangeText={setNewTrxReceiptId} placeholder="TRX-001" placeholderTextColor={DESIGN.textSecondary} keyboardType="default" autoCapitalize="characters" returnKeyType="done" />
+          </View>
+          <Pressable style={[styles.newTrxActionBtn, (!newTrxAmount || !newTrxReceiptId.trim()) && { opacity: 0.4 }]} disabled={!newTrxAmount || !newTrxReceiptId.trim()} onPress={() => { Keyboard.dismiss(); setShowNewTrxInput(false); scanModeRef.current = 'transaction'; setTimeout(() => setIsScannerVisible(true), 150); }}>
+            <QrCode size={18} color="#FFF" strokeWidth={2.5} style={{ marginRight: 8 }} />
+            <Text style={styles.newTrxActionBtnText}>Scan QR Member</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.newTrxCancelBtn, { borderWidth: 1, borderColor: DESIGN.textSecondary, borderRadius: 12, marginTop: 8 }, (!newTrxAmount || !newTrxReceiptId.trim()) && { opacity: 0.4 }]}
+            disabled={!newTrxAmount || !newTrxReceiptId.trim()}
+            onPress={() => { Keyboard.dismiss(); handleProcessWithoutMember(); }}
+          >
+            <Text style={[styles.newTrxCancelText, { color: DESIGN.textSecondary }]}>Lanjut Tanpa Member</Text>
+          </Pressable>
+          <Pressable onPress={() => setShowNewTrxInput(false)} style={styles.newTrxCancelBtn}>
+            <Text style={styles.newTrxCancelText}>Batal</Text>
+          </Pressable>
+        </ScrollView>
+      </PopModal>
+
+      {/* New transaction — confirmation popup */}
+      <PopModal visible={showNewTrxConfirm} onClose={() => { setShowNewTrxConfirm(false); scanModeRef.current = 'member'; setNewTrxPendingMember(null); }}>
+        <View style={styles.fabMenuCard}>
+          <View style={styles.fabMenuHandle} />
+          <Text style={styles.fabMenuTitle}>Konfirmasi Transaksi</Text>
+          <View style={styles.newTrxMemberRow}>
+            <View style={styles.newTrxMemberAvatar}>
+              <Text style={styles.newTrxMemberAvatarText}>{(newTrxPendingMember?.name || '?')[0].toUpperCase()}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.fabMenuOptionTitle}>{newTrxPendingMember?.name || '-'}</Text>
+              <Text style={styles.fabMenuOptionSub}>{newTrxPendingMember?.tier || '-'} · {newTrxPendingMember?.points || 0} poin saat ini</Text>
+            </View>
+            <Crown size={16} color={DESIGN.gold} strokeWidth={2} />
+          </View>
+          <View style={styles.fabMenuDivider} />
+          <View style={styles.newTrxConfirmRow}>
+            <Text style={styles.newTrxConfirmLabel}>NOMINAL</Text>
+            <Text style={styles.newTrxConfirmValue}>Rp {formatRupiah(parseInt(newTrxAmount || '0', 10))}</Text>
+          </View>
+          <View style={styles.newTrxConfirmRow}>
+            <Text style={styles.newTrxConfirmLabel}>ID TRANSAKSI</Text>
+            <Text style={styles.newTrxConfirmValue}>{newTrxReceiptId}</Text>
+          </View>
+          <View style={[styles.newTrxConfirmRow, { borderBottomWidth: 0 }]}>
+            <Text style={styles.newTrxConfirmLabel}>ESTIMASI POIN</Text>
+            <Text style={[styles.newTrxConfirmValue, { color: DESIGN.brandRed }]}>+{Math.floor(parseInt(newTrxAmount || '0', 10) / 1000)} poin</Text>
+          </View>
+          <View style={[styles.fabMenuDivider, { marginBottom: 16 }]} />
+          <Pressable style={[styles.newTrxActionBtn, isProcessingTrx && { opacity: 0.6 }]} onPress={handleConfirmNewTrx} disabled={isProcessingTrx}>
+            {isProcessingTrx ? <ActivityIndicator size="small" color="#FFF" style={{ marginRight: 8 }} /> : <CheckCircle2 size={18} color="#FFF" strokeWidth={2.5} style={{ marginRight: 8 }} />}
+            <Text style={styles.newTrxActionBtnText}>{isProcessingTrx ? 'Memproses…' : 'Konfirmasi & Proses'}</Text>
+          </Pressable>
+          <Pressable onPress={() => { setShowNewTrxConfirm(false); scanModeRef.current = 'member'; setNewTrxPendingMember(null); }} style={styles.newTrxCancelBtn}>
+            <Text style={styles.newTrxCancelText}>Batal</Text>
+          </Pressable>
+        </View>
+      </PopModal>
 
       <PopModal visible={selectedHistoryItem !== null} onClose={() => setSelectedHistoryItem(null)}>
         <View style={styles.historyDetailCard}>
@@ -1574,22 +1959,24 @@ export default function CashierDashboard() {
 
 // --- WORLD-CLASS STYLESHEET ---
 const styles = StyleSheet.create({
-  scannerContainer: { ...StyleSheet.absoluteFillObject, zIndex: 999, backgroundColor: '#000' },
-  cameraLayer: { ...StyleSheet.absoluteFillObject, zIndex: 1 },
-  noCameraBox: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#111' },
-  darkHoleOverlay: { position: 'absolute', top: height / 2 - 130 - 1000, left: width / 2 - 130 - 1000, width: 260 + 2000, height: 260 + 2000, borderWidth: 1000, borderRadius: 1048, borderColor: 'rgba(0,0,0,0.85)', zIndex: 2 },
-  viewfinderCenterFrame: { position: 'absolute', top: height / 2 - 130, left: width / 2 - 130, width: 260, height: 260, justifyContent: 'center', alignItems: 'center', zIndex: 3 },
-  viewfinderHole: { width: 260, height: 260, borderRadius: 48, borderWidth: 2, borderColor: 'rgba(255,255,255,0.4)' },
-  scannerUIContainer: { ...StyleSheet.absoluteFillObject, zIndex: 4, justifyContent: 'space-between' },
-  scannerHeaderGrid: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 24, height: 44 },
-  scannerHeaderLeft: { flex: 1, alignItems: 'flex-start' },
-  scannerHeaderCenter: { flex: 2, alignItems: 'center' },
-  scannerHeaderRight: { flex: 1 }, 
+  // Scanner — Modal-based, flex overlay, no hardcoded screen coords
+  scannerRoot: { flex: 1, backgroundColor: '#000' },
+  scannerNoCam: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#111' },
+  scannerNoCamText: { color: '#FFF', marginBottom: 20, fontSize: 15 },
+  scannerPermBtn: { backgroundColor: DESIGN.brandRed, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 },
+  scannerPermBtnText: { color: '#FFF', fontWeight: '700', fontSize: 15 },
+  // 4-rect overlay — dims everything except transparent scan frame
+  scannerOverlay: { ...StyleSheet.absoluteFillObject, flexDirection: 'column' },
+  scannerDim: { flex: 1, backgroundColor: SCAN_DIM },
+  // Corner brackets drawn inside the transparent frame
+  scanCorner: { position: 'absolute', width: CORNER_SIZE, height: CORNER_SIZE, borderColor: '#FFF' },
+  // UI layer: header + footer
+  scannerUI: { ...StyleSheet.absoluteFillObject, flexDirection: 'column', paddingHorizontal: 24 },
+  scannerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  scannerCloseBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
   scannerBadgePill: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 100 },
   scannerBadgeText: { color: DESIGN.surface, fontSize: 13, fontWeight: '700', letterSpacing: 0.5 },
-  scannerCloseBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
-  scannerFooter: { paddingHorizontal: 24, alignItems: 'center' },
-  scannerInstruction: { color: DESIGN.surface, fontSize: 15, fontWeight: '600', marginBottom: 40, textAlign: 'center', opacity: 0.8 },
+  scannerInstruction: { color: DESIGN.surface, fontSize: 14, fontWeight: '600', textAlign: 'center', opacity: 0.85, lineHeight: 20 },
   permissionBtn: { backgroundColor: DESIGN.surface, paddingVertical: 18, paddingHorizontal: 40, borderRadius: 100, shadowColor: '#000', shadowOffset: {width: 0, height: 10}, shadowOpacity: 0.3, shadowRadius: 20 },
   permissionBtnText: { color: DESIGN.textPrimary, fontSize: 16, fontWeight: '900', letterSpacing: 0.5 },
   
@@ -1707,10 +2094,19 @@ const styles = StyleSheet.create({
   bentoValue: { fontSize: 30, fontWeight: '800', color: DESIGN.textPrimary, letterSpacing: -1 },
   bentoLabel: { fontSize: 11, fontWeight: '600', color: DESIGN.textSecondary, letterSpacing: 0.2 },
   
-  floatingWrapper: { position: 'absolute', bottom: Platform.OS === 'ios' ? 40 : 24, alignSelf: 'center' },
-  scanPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: DESIGN.brandRed, padding: 8, paddingRight: 32, borderRadius: 100, shadowColor: DESIGN.brandRed, shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.4, shadowRadius: 24, elevation: 12 },
-  scanIconBox: { width: 48, height: 48, borderRadius: 24, backgroundColor: DESIGN.surface, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
-  scanText: { color: DESIGN.surface, fontSize: 16, fontWeight: '900', letterSpacing: 1.5 },
+  floatingWrapper: { position: 'absolute', bottom: Platform.OS === 'ios' ? 40 : 24, left: 0, right: 0, alignItems: 'center' },
+
+  morphShadow: { height: MORPH_H, borderRadius: MORPH_H / 2, shadowColor: DESIGN.brandRed, shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.45, shadowRadius: 22, elevation: 12 },
+  morphPill: { height: MORPH_H, borderRadius: MORPH_H / 2, backgroundColor: DESIGN.brandRed, overflow: 'hidden' },
+  morphSingleWrap: { justifyContent: 'center' },
+  morphSingleBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, gap: 10 },
+  morphIconCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: DESIGN.surface, justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
+  morphSingleLabel: { flex: 1, color: DESIGN.surface, fontSize: 13, fontWeight: '900', letterSpacing: 1.3 },
+  morphSplitWrap: { flexDirection: 'row', alignItems: 'center' },
+  morphSplitBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 10 },
+  morphSplitTitle: { color: DESIGN.surface, fontSize: 13, fontWeight: '800', letterSpacing: 0.3 },
+  morphSplitSub: { color: 'rgba(255,255,255,0.72)', fontSize: 10, fontWeight: '500', marginTop: 1 },
+  morphDivider: { width: 1, height: 30, backgroundColor: 'rgba(255,255,255,0.3)' },
 
   subTabContainer: { paddingHorizontal: 24, paddingBottom: 16 },
   subTabTrack: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: 12, padding: 4 },
@@ -1837,9 +2233,46 @@ const styles = StyleSheet.create({
 
   pageContainer: { ...StyleSheet.absoluteFillObject, zIndex: 1000 },
   pageBackground: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)' },
-  floatingHeader: { position: 'absolute', left: 20, zIndex: 10 },
+  floatingHeader: { position: 'absolute', left: 20, zIndex: 20 },
   floatingBackPill: { width: 44, height: 44, borderRadius: 22, backgroundColor: DESIGN.surface, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.1, shadowRadius: 12, elevation: 4 },
+  floatingBackPillLight: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.18)', justifyContent: 'center', alignItems: 'center' },
   pageScroll: { paddingHorizontal: 24, backgroundColor: DESIGN.canvas, minHeight: height },
+  // Member Detail Redesign
+  memberHero: { width: '100%', paddingHorizontal: 28, paddingBottom: 48, alignItems: 'center' },
+  memberAvatarRing: { width: 80, height: 80, borderRadius: 40, borderWidth: 2, justifyContent: 'center', alignItems: 'center', marginBottom: 14 },
+  memberAvatarInner: { width: 68, height: 68, borderRadius: 34, justifyContent: 'center', alignItems: 'center' },
+  memberAvatarImg: { width: 68, height: 68, borderRadius: 34 },
+  memberAvatarText: { fontSize: 26, fontWeight: '800', letterSpacing: -0.5 },
+  memberHeroName: { fontSize: 26, fontWeight: '800', color: '#FFF', letterSpacing: -0.5, marginBottom: 4 },
+  memberHeroUid: { fontSize: 12, color: 'rgba(255,255,255,0.55)', letterSpacing: 1.5, marginBottom: 20 },
+  memberHeroStats: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' },
+  memberHeroPtsBlock: {},
+  memberHeroPtsLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 1.5, marginBottom: 4 },
+  memberHeroPtsValue: { fontSize: 34, fontWeight: '900', color: '#FFF', letterSpacing: -1 },
+  memberTierChip: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 100 },
+  memberTierChipText: { fontSize: 11, fontWeight: '800', letterSpacing: 1 },
+  memberContentPanel: { flex: 1, backgroundColor: DESIGN.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28, marginTop: -24, overflow: 'hidden' },
+  memberTabRow: { flexDirection: 'row', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 4, gap: 8 },
+  memberTab: { flexDirection: 'row', alignItems: 'center', paddingVertical: 9, paddingHorizontal: 16, borderRadius: 100, backgroundColor: DESIGN.canvas },
+  memberTabActive: { backgroundColor: 'rgba(211,35,42,0.08)' },
+  memberTabText: { fontSize: 13, fontWeight: '700', color: DESIGN.textSecondary },
+  memberTabTextActive: { color: DESIGN.brandRed },
+  memberPanelScroll: { paddingHorizontal: 20, paddingTop: 12 },
+  memberVoucherCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: DESIGN.canvas, borderRadius: 18, padding: 14, marginBottom: 10 },
+  memberVoucherLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, paddingRight: 12 },
+  memberVoucherIconWrap: { width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(211,35,42,0.08)', justifyContent: 'center', alignItems: 'center' },
+  memberVoucherTitle: { fontSize: 14, fontWeight: '800', color: DESIGN.textPrimary, marginBottom: 3 },
+  memberVoucherExp: { fontSize: 11, color: DESIGN.textSecondary },
+  memberRedeemBtn: { backgroundColor: DESIGN.brandRed, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 100 },
+  memberRedeemBtnText: { color: '#FFF', fontSize: 12, fontWeight: '800' },
+  memberEmptyState: { alignItems: 'center', paddingVertical: 40, gap: 12 },
+  memberEmptyText: { fontSize: 14, color: DESIGN.textSecondary, fontStyle: 'italic' },
+  memberHistoryRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: DESIGN.canvas },
+  memberHistoryIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: DESIGN.canvas, justifyContent: 'center', alignItems: 'center' },
+  memberHistoryTitle: { fontSize: 13, fontWeight: '700', color: DESIGN.textPrimary, marginBottom: 3 },
+  memberHistoryMeta: { fontSize: 11, color: DESIGN.textSecondary },
+  memberHistoryAmount: { fontSize: 13, fontWeight: '700', color: DESIGN.textPrimary },
+  memberHistoryPts: { fontSize: 11, fontWeight: '700', marginTop: 2 },
   digitalCard: { width: '100%', height: 220, backgroundColor: DESIGN.surfaceDark, borderRadius: 24, padding: 24, justifyContent: 'space-between', marginBottom: 24, shadowColor: '#000', shadowOffset: {width: 0, height: 16}, shadowOpacity: 0.25, shadowRadius: 24, elevation: 15 },
   digitalCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   cardBrandText: { color: DESIGN.surface, fontSize: 20, fontWeight: '900', letterSpacing: 1 },
@@ -1881,6 +2314,10 @@ const styles = StyleSheet.create({
   alertIconBox: { width: 24, height: 24, borderRadius: 12, backgroundColor: DESIGN.brandRed, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
   alertText: { flex: 1, fontSize: 14, fontWeight: '700', color: DESIGN.textPrimary },
 
+  // Bottom-sheet KAV variant (keyboardPadding=true)
+  kbSheetWrapper: { ...StyleSheet.absoluteFillObject, justifyContent: 'flex-end' },
+  kbSheetCard: { width: '100%', backgroundColor: DESIGN.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingTop: 12, paddingHorizontal: 20, shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.08, shadowRadius: 16, elevation: 16 },
+
   voucherModalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   voucherModalContainer: { width: '100%', maxWidth: 420 },
   voucherModalCardInner: { width: '100%', backgroundColor: DESIGN.surface, borderRadius: 32, paddingTop: 32, paddingBottom: 24, paddingHorizontal: 24, alignItems: 'stretch', shadowColor: '#000', shadowOffset: {width: 0, height: 20}, shadowOpacity: 0.3, shadowRadius: 30, elevation: 15 },
@@ -1920,4 +2357,25 @@ const styles = StyleSheet.create({
   historyDetailRedeemBox: { backgroundColor: 'rgba(211,35,42,0.06)' },
   historyDetailRedeemTitle: { color: DESIGN.brandRed, fontSize: 20, lineHeight: 25 },
   historyDetailRows: { marginTop: 2 },
+
+  // --- NEW TRX FLOW ---
+  fabMenuCard: { width: '100%', backgroundColor: DESIGN.surface, borderRadius: 28, paddingTop: 12, paddingHorizontal: 20, paddingBottom: 28, shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.2, shadowRadius: 28, elevation: 14 },
+  fabMenuHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: 'rgba(0,0,0,0.1)', alignSelf: 'center', marginBottom: 18 },
+  fabMenuTitle: { fontSize: 17, fontWeight: '800', color: DESIGN.textPrimary, letterSpacing: -0.3, marginBottom: 16 },
+  fabMenuOptionTitle: { fontSize: 15, fontWeight: '700', color: DESIGN.textPrimary, marginBottom: 2 },
+  fabMenuOptionSub: { fontSize: 12, color: DESIGN.textSecondary, lineHeight: 16, marginBottom: 16 },
+  fabMenuDivider: { height: 1, backgroundColor: DESIGN.canvas, marginVertical: 4 },
+  newTrxInputGroup: { marginBottom: 14 },
+  newTrxInputLabel: { fontSize: 10, fontWeight: '700', color: DESIGN.textSecondary, letterSpacing: 1.5, marginBottom: 6 },
+  newTrxInput: { backgroundColor: DESIGN.canvas, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 13, fontSize: 16, fontWeight: '600', color: DESIGN.textPrimary, borderWidth: 1, borderColor: 'rgba(0,0,0,0.06)' },
+  newTrxActionBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: DESIGN.brandRed, borderRadius: 14, paddingVertical: 15, marginTop: 4, marginBottom: 8 },
+  newTrxActionBtnText: { fontSize: 15, fontWeight: '700', color: '#FFF', letterSpacing: 0.2 },
+  newTrxCancelBtn: { alignItems: 'center', paddingVertical: 8 },
+  newTrxCancelText: { fontSize: 14, color: DESIGN.textSecondary },
+  newTrxMemberRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
+  newTrxMemberAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: DESIGN.canvas, justifyContent: 'center', alignItems: 'center' },
+  newTrxMemberAvatarText: { fontSize: 18, fontWeight: '800', color: DESIGN.textPrimary },
+  newTrxConfirmRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: DESIGN.canvas },
+  newTrxConfirmLabel: { fontSize: 11, fontWeight: '600', color: DESIGN.textSecondary, letterSpacing: 0.8 },
+  newTrxConfirmValue: { fontSize: 15, fontWeight: '700', color: DESIGN.textPrimary },
 });
