@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Image, StyleSheet, View, ActivityIndicator, Platform, InteractionManager } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import { getAuth } from 'firebase/auth';
 
 // 🔥 IMPORT LAYAR BARU & ZUSTAND
 import { preloadCriticalAssets, warmSecondaryAssets } from './src/utils/preloadAppAssets';
@@ -28,6 +29,20 @@ export default function App() {
     // Jalankan listener Firebase saat aplikasi dibuka
     initializeAuth();
   }, [initializeAuth]);
+
+  // Pre-refresh token every 45 min — prevents auth failure when token expires mid-shift
+  useEffect(() => {
+    const REFRESH_INTERVAL_MS = 45 * 60 * 1000;
+    const id = setInterval(async () => {
+      try {
+        const user = getAuth().currentUser;
+        if (user) await user.getIdToken(/* forceRefresh */ true);
+      } catch (err) {
+        console.warn('[App] Token pre-refresh failed:', err);
+      }
+    }, REFRESH_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     const task = InteractionManager.runAfterInteractions(() => {
